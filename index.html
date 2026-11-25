@@ -917,6 +917,8 @@
         let currentClientIp = null;
         let currentSessionToken = null;
         let isKickedByNewSession = false;
+        let unsubscribeSelfUserDoc = null;
+        let sessionChannel = null;
 
         // Flashcard State
         let fcState = {
@@ -1134,6 +1136,7 @@
                 setSaveStatus('offline');
             }
 
+            initSessionBroadcastChannel();
             syncToLocalStorage();
 
             // Khôi phục phiên đăng nhập nếu có
@@ -1155,9 +1158,8 @@
                             lastIp: currentClientIp || foundUser.lastIp || 'Chưa ghi nhận'
                         };
                         safeStorage.set(LS_KEYS.SESSION, { userId: currentUser.id, sessionToken: currentSessionToken });
-                        if (!foundUser.activeSessionId || (currentClientIp && foundUser.lastIp !== currentClientIp)) {
-                            saveUserDoc(currentUser);
-                        }
+                        saveUserDoc(currentUser);
+                        subscribeToCurrentUserSession();
                         hideLoading();
                         enterMainApp();
                         return;
@@ -1171,6 +1173,64 @@
 
         function generateSessionToken() {
             return 'sess_' + Date.now() + '_' + Math.random().toString(36).slice(2, 10);
+        }
+
+        function broadcastSessionUpdate(userId, sessionToken) {
+            try {
+                if (sessionChannel) {
+                    sessionChannel.postMessage({ type: 'NEW_SESSION', userId, sessionToken });
+                }
+            } catch (e) { /* ignore */ }
+        }
+
+        function initSessionBroadcastChannel() {
+            try {
+                if ('BroadcastChannel' in window && !sessionChannel) {
+                    sessionChannel = new BroadcastChannel('vocaflow_session_channel_v2');
+                    sessionChannel.onmessage = (event) => {
+                        const msg = event?.data;
+                        if (!msg || msg.type !== 'NEW_SESSION' || !currentUser) return;
+                        if (msg.userId === currentUser.id && msg.sessionToken && msg.sessionToken !== currentSessionToken) {
+                            enforceSingleActiveSession({
+                                ...currentUser,
+                                activeSessionId: msg.sessionToken
+                            });
+                        }
+                    };
+                }
+            } catch (e) { /* ignore */ }
+        }
+
+        function subscribeToCurrentUserSession() {
+            if (unsubscribeSelfUserDoc) {
+                try { unsubscribeSelfUserDoc(); } catch (e) { /* ignore */ }
+                unsubscribeSelfUserDoc = null;
+            }
+            if (!useFirebase || !db || !currentUser) return;
+
+            try {
+                const selfRef = doc(db, 'artifacts', appId, 'public', 'data', 'users', currentUser.id);
+                unsubscribeSelfUserDoc = onSnapshot(selfRef, (snap) => {
+                    if (!snap.exists() || !currentUser) return;
+                    const remoteSelf = snap.data();
+                    const idx = appUsers.findIndex(u => u.id === remoteSelf.id);
+                    if (idx >= 0) appUsers[idx] = remoteSelf;
+                    else appUsers.push(remoteSelf);
+                    safeStorage.set(LS_KEYS.USERS, appUsers);
+
+                    if (remoteSelf.locked) {
+                        handleLogout(true, 'Tài khoản của bạn đã bị khóa bởi quản trị viên.');
+                        return;
+                    }
+                    if (enforceSingleActiveSession(remoteSelf)) {
+                        return;
+                    }
+                    currentUser = { ...currentUser, ...remoteSelf };
+                    updateNavbarUser();
+                }, (err) => console.warn('Self user snapshot error:', err));
+            } catch (err) {
+                console.warn('subscribeToCurrentUserSession error:', err);
+            }
         }
 
         function enforceSingleActiveSession(userRecord) {
@@ -1459,13 +1519,19 @@
                 return;
             }
 
+            isKickedByNewSession = false;
+            currentSessionToken = generateSessionToken();
+
             currentUser = {
                 ...found,
+                activeSessionId: currentSessionToken,
                 lastIp: currentClientIp || found.lastIp || 'Chưa ghi nhận',
                 lastLoginAt: new Date().toISOString()
             };
-            safeStorage.set(LS_KEYS.SESSION, currentUser.id);
+            safeStorage.set(LS_KEYS.SESSION, { userId: currentUser.id, sessionToken: currentSessionToken });
             saveUserDoc(currentUser);
+            broadcastSessionUpdate(currentUser.id, currentSessionToken);
+            subscribeToCurrentUserSession();
 
             // Nếu chưa kịp lấy IP lúc mở trang, thử lấy lại ngay khi đăng nhập
             if (!currentClientIp) {
@@ -1518,12 +1584,18 @@
             await saveUserDoc(newUser);
             currentUser = newUser;
             safeStorage.set(LS_KEYS.SESSION, { userId: currentUser.id, sessionToken: currentSessionToken });
+            broadcastSessionUpdate(currentUser.id, currentSessionToken);
+            subscribeToCurrentUserSession();
             document.getElementById('register-form').reset();
             enterMainApp();
             showToast('Đăng ký tài khoản thành công!', 'success');
         };
 
         window.handleLogout = function(kicked = false, reason = '') {
+            if (unsubscribeSelfUserDoc) {
+                try { unsubscribeSelfUserDoc(); } catch (e) { /* ignore */ }
+                unsubscribeSelfUserDoc = null;
+            }
             currentUser = null;
             currentTopicId = null;
             currentSessionToken = null;
