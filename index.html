@@ -425,26 +425,41 @@
                             <i class="fa-solid fa-circle-plus text-brand-600"></i> Thêm từ vựng mới vào chủ đề
                         </h3>
                         <span class="text-[11px] text-slate-400">
-                            <i class="fa-solid fa-wand-magic-sparkles text-brand-500 mr-1"></i>Tự động tra phiên âm IPA & âm thanh chuẩn khi nhập từ
+                            <i class="fa-solid fa-wand-magic-sparkles text-brand-500 mr-1"></i>Tự động dịch nghĩa, nhận diện từ loại, tra IPA & âm thanh chuẩn
                         </span>
                     </div>
+                    <datalist id="pos-options">
+                        <option value="Danh từ (n)">
+                        <option value="Động từ (v)">
+                        <option value="Tính từ (adj)">
+                        <option value="Trạng từ (adv)">
+                        <option value="Giới từ (prep)">
+                        <option value="Liên từ (conj)">
+                        <option value="Đại từ (pron)">
+                        <option value="Thán từ (interj)">
+                        <option value="Cụm từ (phrase)">
+                    </datalist>
                     <form onsubmit="handleAddWord(event)" class="grid grid-cols-1 sm:grid-cols-12 gap-3">
                         <input type="hidden" id="new-word-audio" value="">
-                        <div class="sm:col-span-4">
+                        <div class="sm:col-span-3">
                             <input id="new-word-en" type="text" required oninput="onNewWordInput()" placeholder="Từ tiếng Anh (VD: Accomplish)"
                                 class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none text-sm">
                         </div>
-                        <div class="sm:col-span-3">
-                            <input id="new-word-vi" type="text" required placeholder="Nghĩa tiếng Việt (VD: Hoàn thành)"
+                        <div class="sm:col-span-2">
+                            <input id="new-word-pos" type="text" list="pos-options" oninput="onNewPosManualInput()" placeholder="Từ loại (VD: Động từ)"
+                                class="w-full px-3 py-2.5 rounded-xl border border-slate-200 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none text-sm">
+                        </div>
+                        <div class="sm:col-span-2">
+                            <input id="new-word-vi" type="text" required oninput="onNewViManualInput()" placeholder="Nghĩa tiếng Việt..."
                                 class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none text-sm">
                         </div>
                         <div class="sm:col-span-3 flex gap-1.5">
-                            <input id="new-word-phonetic" type="text" placeholder="Phiên âm (/.../)"
-                                class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none text-sm font-mono">
-                            <button type="button" id="btn-fetch-new-ipa" onclick="fetchNewWordIPA()" title="Lấy phiên âm IPA tự động"
+                            <input id="new-word-phonetic" type="text" oninput="onNewPhoneticManualInput()" placeholder="Phiên âm IPA..."
+                                class="w-full px-3 py-2.5 rounded-xl border border-slate-200 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none text-sm font-mono">
+                            <button type="button" id="btn-fetch-new-ipa" onclick="fetchNewWordIPA(false)" title="Tự động dịch nghĩa, từ loại & lấy phiên âm IPA"
                                 class="px-3 py-2.5 rounded-xl bg-brand-50 hover:bg-brand-100 text-brand-700 border border-brand-200/80 text-xs font-semibold transition-all whitespace-nowrap flex items-center gap-1 shrink-0">
                                 <i class="fa-solid fa-wand-magic-sparkles"></i>
-                                <span>Lấy IPA</span>
+                                <span>Tự điền</span>
                             </button>
                         </div>
                         <div class="sm:col-span-2">
@@ -1002,6 +1017,10 @@
                     <input id="edit-word-en" type="text" required oninput="onEditWordInput()" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:border-brand-500 outline-none text-sm">
                 </div>
                 <div>
+                    <label class="block text-xs font-bold text-slate-600 uppercase mb-1.5">Từ loại (tự động hoặc chọn)</label>
+                    <input id="edit-word-pos" type="text" list="pos-options" placeholder="VD: Danh từ (n), Động từ (v)..." class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:border-brand-500 outline-none text-sm">
+                </div>
+                <div>
                     <label class="block text-xs font-bold text-slate-600 uppercase mb-1.5">Nghĩa tiếng Việt *</label>
                     <input id="edit-word-vi" type="text" required class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:border-brand-500 outline-none text-sm">
                 </div>
@@ -1115,6 +1134,9 @@
         // Debounce timers & Audio player for Dictionary API
         let newWordDebounceTimer = null;
         let editWordDebounceTimer = null;
+        let isNewViManuallyEdited = false;
+        let isNewPhoneticManuallyEdited = false;
+        let isNewPosManuallyEdited = false;
         let activeAudioPlayer = null;
         let currentClientIp = null;
         let currentSessionToken = null;
@@ -2260,6 +2282,7 @@
                         <div class="min-w-0">
                             <div class="flex flex-wrap items-center gap-2">
                                 <span class="font-extrabold text-slate-900 text-base">${escapeHtml(w.en)}</span>
+                                ${w.pos ? `<span class="text-[11px] font-bold text-violet-700 bg-violet-50 border border-violet-200/70 px-2 py-0.5 rounded-md">${escapeHtml(w.pos)}</span>` : ''}
                                 ${w.phonetic ? `<span class="font-mono text-xs text-brand-600 bg-brand-50 px-2 py-0.5 rounded-md">${escapeHtml(w.phonetic)}</span>` : ''}
                             </div>
                             <div class="text-sm text-slate-600 mt-0.5">${escapeHtml(w.vi)}</div>
@@ -2311,40 +2334,145 @@
             showToast(`Đã lưu bản sao "${copied.title}" vào Chủ đề của tôi!`, 'success');
         };
 
-        async function lookupDictionaryIPA(rawWord) {
-            const cleanWord = String(rawWord || '').trim().split(/\s+/)[0].replace(/^[^a-zA-Z-]+|[^a-zA-Z-]+$/g, '').toLowerCase();
-            if (!cleanWord) return { found: false, phonetic: '', audio: '' };
+        const POS_VI_MAP = {
+            noun: 'Danh từ (n)',
+            n: 'Danh từ (n)',
+            verb: 'Động từ (v)',
+            v: 'Động từ (v)',
+            adjective: 'Tính từ (adj)',
+            adj: 'Tính từ (adj)',
+            adverb: 'Trạng từ (adv)',
+            adv: 'Trạng từ (adv)',
+            preposition: 'Giới từ (prep)',
+            conjunction: 'Liên từ (conj)',
+            pronoun: 'Đại từ (pron)',
+            interjection: 'Thán từ (interj)',
+            determiner: 'Từ hạn định (det)',
+            exclamation: 'Thán từ (interj)'
+        };
 
+        function formatPosList(posKeys) {
+            const mapped = [];
+            for (const key of posKeys) {
+                const label = POS_VI_MAP[String(key || '').toLowerCase()];
+                if (label && !mapped.includes(label)) mapped.push(label);
+                if (mapped.length >= 2) break;
+            }
+            return mapped.join(', ');
+        }
+
+        async function lookupSingleWordIPA(cleanWord) {
+            let phonetic = '';
+            let audio = '';
+            const posSet = [];
+
+            // 1) Nguồn chính: Free Dictionary API (có cả IPA, từ loại và file audio chuẩn)
             try {
-                const res = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(cleanWord)}`);
-                if (!res.ok) return { found: false, phonetic: '', audio: '' };
-                const data = await res.json();
-                if (!Array.isArray(data) || data.length === 0) return { found: false, phonetic: '', audio: '' };
-
-                const entry = data[0];
-                let phonetic = entry.phonetic || '';
-                let audio = '';
-
-                if (Array.isArray(entry.phonetics)) {
-                    for (const p of entry.phonetics) {
-                        if (!phonetic && p.text) phonetic = p.text;
-                        if (!audio && p.audio) audio = p.audio;
-                        if (phonetic && audio) break;
+                const controller = new AbortController();
+                const tid = setTimeout(() => controller.abort(), 4000);
+                const res = await fetch(
+                    `https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(cleanWord)}`,
+                    { signal: controller.signal }
+                );
+                clearTimeout(tid);
+                if (res.ok) {
+                    const data = await res.json();
+                    if (Array.isArray(data)) {
+                        for (const entry of data) {
+                            if (!phonetic && entry.phonetic) phonetic = String(entry.phonetic).trim();
+                            if (Array.isArray(entry.phonetics)) {
+                                for (const p of entry.phonetics) {
+                                    if (!phonetic && p.text) phonetic = String(p.text).trim();
+                                    if (!audio && p.audio) audio = String(p.audio).trim();
+                                }
+                            }
+                            if (Array.isArray(entry.meanings)) {
+                                for (const m of entry.meanings) {
+                                    if (m && m.partOfSpeech) posSet.push(m.partOfSpeech);
+                                }
+                            }
+                        }
                     }
                 }
-
-                if (phonetic && !phonetic.startsWith('/') && !phonetic.startsWith('[')) {
-                    phonetic = `/${phonetic}/`;
-                }
-
-                return {
-                    found: Boolean(phonetic || audio),
-                    phonetic,
-                    audio
-                };
             } catch (err) {
-                return { found: false, phonetic: '', audio: '' };
+                // Thử nguồn dự phòng bên dưới
             }
+
+            // 2) Nguồn dự phòng: Datamuse CMUdict (có cả IPA và từ loại n/v/adj/adv)
+            if (!phonetic || posSet.length === 0) {
+                try {
+                    const controller = new AbortController();
+                    const tid = setTimeout(() => controller.abort(), 4000);
+                    const res = await fetch(
+                        `https://api.datamuse.com/words?sp=${encodeURIComponent(cleanWord)}&md=pr&ipa=1&max=1`,
+                        { signal: controller.signal }
+                    );
+                    clearTimeout(tid);
+                    if (res.ok) {
+                        const data = await res.json();
+                        if (Array.isArray(data) && data.length > 0 && Array.isArray(data[0].tags)) {
+                            const matchedWord = String(data[0].word || '').toLowerCase();
+                            if (matchedWord === cleanWord) {
+                                if (!phonetic) {
+                                    const ipaTag = data[0].tags.find(t => typeof t === 'string' && t.startsWith('ipa_pron:'));
+                                    if (ipaTag) {
+                                        const rawIpa = ipaTag.slice('ipa_pron:'.length).trim();
+                                        if (rawIpa) phonetic = `/${rawIpa}/`;
+                                    }
+                                }
+                                if (posSet.length === 0) {
+                                    for (const tag of data[0].tags) {
+                                        if (POS_VI_MAP[tag]) posSet.push(tag);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } catch (err) {
+                    // Bỏ qua nếu không kết nối được
+                }
+            }
+
+            if (phonetic && !phonetic.startsWith('/') && !phonetic.startsWith('[')) {
+                phonetic = `/${phonetic}/`;
+            }
+
+            const pos = formatPosList(posSet);
+            return {
+                found: Boolean(phonetic || audio || pos),
+                phonetic,
+                audio,
+                pos
+            };
+        }
+
+        async function lookupDictionaryIPA(rawWord) {
+            const tokens = String(rawWord || '')
+                .trim()
+                .split(/\s+/)
+                .map(t => t.replace(/^[^a-zA-Z'-]+|[^a-zA-Z'-]+$/g, '').toLowerCase())
+                .filter(Boolean)
+                .slice(0, 6);
+
+            if (tokens.length === 0) return { found: false, phonetic: '', audio: '', pos: '' };
+
+            if (tokens.length === 1) {
+                return await lookupSingleWordIPA(tokens[0]);
+            }
+
+            // Hỗ trợ cụm từ nhiều chữ (VD: pick up, job interview...)
+            const results = await Promise.all(tokens.map(t => lookupSingleWordIPA(t)));
+            const ipaParts = results
+                .map(r => (r.phonetic || '').replace(/^\/+|\/+$/g, '').replace(/^\[|\]$/g, '').trim())
+                .filter(Boolean);
+
+            const combinedPhonetic = ipaParts.length > 0 ? `/${ipaParts.join(' ')}/` : '';
+            return {
+                found: Boolean(combinedPhonetic),
+                phonetic: combinedPhonetic,
+                audio: '',
+                pos: 'Cụm từ (phrase)'
+            };
         }
 
         function setIpaStatusUI(elId, type, message) {
@@ -2369,16 +2497,88 @@
             el.innerHTML = `${icons[type] || ''}<span>${escapeHtml(message)}</span>`;
         }
 
+        async function lookupVietnameseMeaning(rawText) {
+            const text = String(rawText || '').trim();
+            if (!text) return '';
+
+            const formatVi = (str) => {
+                const cleaned = String(str || '').trim().replace(/\s+/g, ' ');
+                if (!cleaned) return '';
+                return cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
+            };
+
+            // 1) Google Translate public endpoint (nhanh, chuẩn cho cả từ đơn & cụm từ)
+            try {
+                const controller = new AbortController();
+                const tid = setTimeout(() => controller.abort(), 4500);
+                const res = await fetch(
+                    `https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=vi&dt=t&q=${encodeURIComponent(text)}`,
+                    { signal: controller.signal }
+                );
+                clearTimeout(tid);
+                if (res.ok) {
+                    const data = await res.json();
+                    if (Array.isArray(data) && Array.isArray(data[0])) {
+                        const translated = data[0].map(item => (Array.isArray(item) ? item[0] : '')).join('').trim();
+                        if (translated) return formatVi(translated);
+                    }
+                }
+            } catch (err) {
+                // Thử nguồn dự phòng bên dưới
+            }
+
+            // 2) Fallback: MyMemory API
+            try {
+                const controller = new AbortController();
+                const tid = setTimeout(() => controller.abort(), 4500);
+                const res = await fetch(
+                    `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=en|vi`,
+                    { signal: controller.signal }
+                );
+                clearTimeout(tid);
+                if (res.ok) {
+                    const data = await res.json();
+                    const translated = data?.responseData?.translatedText || '';
+                    if (translated && !translated.toUpperCase().includes('MYMEMORY WARNING')) {
+                        return formatVi(translated);
+                    }
+                }
+            } catch (err) {
+                // Bỏ qua nếu mất mạng
+            }
+
+            return '';
+        }
+
+        window.onNewViManualInput = function() {
+            const viVal = document.getElementById('new-word-vi').value.trim();
+            isNewViManuallyEdited = viVal.length > 0;
+        };
+
+        window.onNewPhoneticManualInput = function() {
+            const phonVal = document.getElementById('new-word-phonetic').value.trim();
+            isNewPhoneticManuallyEdited = phonVal.length > 0;
+        };
+
+        window.onNewPosManualInput = function() {
+            const posVal = document.getElementById('new-word-pos').value.trim();
+            isNewPosManuallyEdited = posVal.length > 0;
+        };
+
         window.onNewWordInput = function() {
             clearTimeout(newWordDebounceTimer);
             const word = document.getElementById('new-word-en').value.trim();
             if (!word) {
                 setIpaStatusUI('new-ipa-status', null);
+                if (!isNewViManuallyEdited) document.getElementById('new-word-vi').value = '';
+                if (!isNewPhoneticManuallyEdited) document.getElementById('new-word-phonetic').value = '';
+                if (!isNewPosManuallyEdited) document.getElementById('new-word-pos').value = '';
+                document.getElementById('new-word-audio').value = '';
                 return;
             }
             newWordDebounceTimer = setTimeout(() => {
                 fetchNewWordIPA(true);
-            }, 600);
+            }, 500);
         };
 
         window.fetchNewWordIPA = async function(isAuto = false) {
@@ -2387,19 +2587,59 @@
                 if (!isAuto) showToast('Vui lòng nhập từ tiếng Anh trước!', 'info');
                 return;
             }
-            setIpaStatusUI('new-ipa-status', 'loading', `Đang tra phiên âm cho "${word}"...`);
-            const result = await lookupDictionaryIPA(word);
+            setIpaStatusUI('new-ipa-status', 'loading', `Đang tự động dịch nghĩa, từ loại & phiên âm cho "${word}"...`);
+
+            const [ipaResult, viMeaning] = await Promise.all([
+                lookupDictionaryIPA(word),
+                lookupVietnameseMeaning(word)
+            ]);
+
             if (document.getElementById('new-word-en').value.trim() !== word) return;
 
-            if (result.found) {
-                const phonInput = document.getElementById('new-word-phonetic');
-                if (result.phonetic && (!isAuto || !phonInput.value.trim())) {
-                    phonInput.value = result.phonetic;
+            const viInput = document.getElementById('new-word-vi');
+            const phonInput = document.getElementById('new-word-phonetic');
+            const posInput = document.getElementById('new-word-pos');
+            let filledVi = false;
+            let filledIpa = false;
+            let filledPos = false;
+
+            if (viMeaning && (!isAuto || !isNewViManuallyEdited || !viInput.value.trim())) {
+                viInput.value = viMeaning;
+                isNewViManuallyEdited = false;
+                filledVi = true;
+            }
+
+            if (ipaResult.pos && (!isAuto || !isNewPosManuallyEdited || !posInput.value.trim())) {
+                posInput.value = ipaResult.pos;
+                isNewPosManuallyEdited = false;
+                filledPos = true;
+            } else if (!ipaResult.pos && !isNewPosManuallyEdited) {
+                posInput.value = '';
+            }
+
+            if (ipaResult.found && ipaResult.phonetic) {
+                if (!isAuto || !isNewPhoneticManuallyEdited || !phonInput.value.trim()) {
+                    phonInput.value = ipaResult.phonetic;
+                    isNewPhoneticManuallyEdited = false;
+                    filledIpa = true;
                 }
-                document.getElementById('new-word-audio').value = result.audio || '';
-                setIpaStatusUI('new-ipa-status', 'success', `Đã tìm thấy phiên âm ${result.phonetic || ''}${result.audio ? ' & âm thanh chuẩn' : ''}!`);
+                document.getElementById('new-word-audio').value = ipaResult.audio || '';
             } else {
-                setIpaStatusUI('new-ipa-status', 'warn', 'Không tìm thấy trong từ điển — bạn vẫn có thể nhập phiên âm tay hoặc thêm từ bình thường.');
+                if (!isNewPhoneticManuallyEdited) {
+                    phonInput.value = '';
+                }
+                document.getElementById('new-word-audio').value = ipaResult.audio || '';
+            }
+
+            if (filledVi || filledIpa || filledPos) {
+                const parts = [];
+                if (filledPos) parts.push(`từ loại "${ipaResult.pos}"`);
+                if (filledVi) parts.push(`nghĩa "${viMeaning}"`);
+                if (filledIpa) parts.push(`IPA ${ipaResult.phonetic}`);
+                if (ipaResult.audio) parts.push('âm thanh chuẩn');
+                setIpaStatusUI('new-ipa-status', 'success', `Đã tự động điền ${parts.join(', ')}!`);
+            } else {
+                setIpaStatusUI('new-ipa-status', 'warn', 'Không tra được tự động — bạn có thể tự nhập nghĩa, từ loại và phiên âm bình thường.');
             }
         };
 
@@ -2424,8 +2664,9 @@
 
             if (result.found) {
                 if (result.phonetic) document.getElementById('edit-word-phonetic').value = result.phonetic;
+                if (result.pos) document.getElementById('edit-word-pos').value = result.pos;
                 document.getElementById('edit-word-audio').value = result.audio || '';
-                setIpaStatusUI('edit-ipa-status', 'success', `Đã cập nhật phiên âm ${result.phonetic || ''}${result.audio ? ' & âm thanh chuẩn' : ''}!`);
+                setIpaStatusUI('edit-ipa-status', 'success', `Đã cập nhật ${result.pos ? result.pos + ', ' : ''}phiên âm ${result.phonetic || ''}${result.audio ? ' & âm thanh chuẩn' : ''}!`);
             } else {
                 setIpaStatusUI('edit-ipa-status', 'warn', 'Không tìm thấy trong từ điển — bạn vẫn có thể tự nhập phiên âm.');
             }
@@ -2485,6 +2726,7 @@
             if (!topic) return;
 
             const en = document.getElementById('new-word-en').value.trim();
+            const pos = document.getElementById('new-word-pos').value.trim();
             const vi = document.getElementById('new-word-vi').value.trim();
             const phonetic = document.getElementById('new-word-phonetic').value.trim();
             const audio = document.getElementById('new-word-audio').value.trim();
@@ -2492,6 +2734,7 @@
             const newWord = {
                 id: 'w_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
                 en,
+                pos,
                 vi,
                 phonetic,
                 audio
@@ -2501,9 +2744,13 @@
             await saveTopicDoc(updated);
 
             document.getElementById('new-word-en').value = '';
+            document.getElementById('new-word-pos').value = '';
             document.getElementById('new-word-vi').value = '';
             document.getElementById('new-word-phonetic').value = '';
             document.getElementById('new-word-audio').value = '';
+            isNewViManuallyEdited = false;
+            isNewPhoneticManuallyEdited = false;
+            isNewPosManuallyEdited = false;
             setIpaStatusUI('new-ipa-status', null);
             document.getElementById('new-word-en').focus();
 
@@ -2518,6 +2765,7 @@
 
             document.getElementById('edit-word-id').value = word.id;
             document.getElementById('edit-word-en').value = word.en;
+            document.getElementById('edit-word-pos').value = word.pos || '';
             document.getElementById('edit-word-vi').value = word.vi;
             document.getElementById('edit-word-phonetic').value = word.phonetic || '';
             document.getElementById('edit-word-audio').value = word.audio || '';
@@ -2532,11 +2780,12 @@
 
             const wordId = document.getElementById('edit-word-id').value;
             const en = document.getElementById('edit-word-en').value.trim();
+            const pos = document.getElementById('edit-word-pos').value.trim();
             const vi = document.getElementById('edit-word-vi').value.trim();
             const phonetic = document.getElementById('edit-word-phonetic').value.trim();
             const audio = document.getElementById('edit-word-audio').value.trim();
 
-            const updatedWords = (topic.words || []).map(w => w.id === wordId ? { ...w, en, vi, phonetic, audio } : w);
+            const updatedWords = (topic.words || []).map(w => w.id === wordId ? { ...w, en, pos, vi, phonetic, audio } : w);
             await saveTopicDoc({ ...topic, words: updatedWords });
             closeModal('word-modal');
             renderTopicDetail(currentTopicId);
@@ -3853,7 +4102,7 @@
                 "rows": [
                     {
                         "rule": "Đếm được — Số ít (1 cái)",
-                        "detail": "Dùng a/an (dùng \"an\" Ở đầu từ là nguyên âm u,e,o,a,i hoặc h câm; lưu ý: a university vì đọc /juː/)",
+                        "detail": "Dùng a/an (dùng \"an\" trước ÂM nguyên âm u,e,o,a,i hoặc h câm; lưu ý: a university vì đọc /juː/)",
                         "example": "a bus, an applicant, an hour, a university",
                         "speak": "a bus, an applicant, an hour, a university"
                     },
@@ -4036,7 +4285,7 @@
                     },
                     {
                         "rule": "Đứng SAU động từ nối",
-                        "detail": "Be, Look, Feel, Seem, Become",
+                        "detail": "Sau be, look, feel, seem, become",
                         "example": "She looks confident • It is useful",
                         "speak": "She looks confident, It is useful"
                     }
@@ -4172,19 +4421,19 @@
                 "rows": [
                     {
                         "rule": "1. Nguyên mẫu (V0)",
-                        "detail": "Can, Could, Will, Should, Must → giữ nguyên gốc",
+                        "detail": "Sau can, could, will, should, must → giữ nguyên gốc",
                         "example": "We will hire • You should apply",
                         "speak": "We will hire, You should apply"
                     },
                     {
                         "rule": "2. Động từ To-V",
-                        "detail": "Want, Need, Plan, Decide, Would like → thêm to + V0",
+                        "detail": "Sau want, need, plan, decide, would like → thêm to + V0",
                         "example": "I want to eat • We plan to visit • They need to offer",
                         "speak": "I want to eat, We plan to visit, They need to offer"
                     },
                     {
                         "rule": "3. Động từ V-ing",
-                        "detail": "Enjoy, Love, Like, Finish, Suggest (thêm -ing, bỏ -e câm cuối từ trước khi thêm -ing, VD: make → making)",
+                        "detail": "Sau enjoy, love, like, finish, suggest → thêm -ing (bỏ -e câm cuối từ trước khi thêm -ing, VD: make → making)",
                         "example": "I enjoy sleeping • Tom finishes doing • He suggests buying",
                         "speak": "I enjoy sleeping, Tom finishes doing, He suggests buying"
                     }
