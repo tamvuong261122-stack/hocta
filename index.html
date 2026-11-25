@@ -252,7 +252,7 @@
                     <div class="flex items-center gap-2 sm:gap-3">
                         <!-- Auto-save Status Indicator -->
                         <div id="save-status-badge" class="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-emerald-50 border border-emerald-200/80 text-emerald-700 text-[11px] font-semibold transition-all" title="Trạng thái đồng bộ dữ liệu">
-                            <i class="fa-solid fa-cloud-check text-emerald-600"></i>
+                            <i class="fa-solid fa-circle-check text-emerald-600"></i>
                             <span>Đã lưu tự động</span>
                         </div>
 
@@ -417,7 +417,7 @@
                         </div>
                         <div class="sm:col-span-3 flex gap-1.5">
                             <input id="new-word-phonetic" type="text" placeholder="Phiên âm (/.../)"
-                                class="w-full px-3 py-2.5 rounded-xl border border-slate-200 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none text-sm font-mono">
+                                class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none text-sm font-mono">
                             <button type="button" id="btn-fetch-new-ipa" onclick="fetchNewWordIPA()" title="Lấy phiên âm IPA tự động"
                                 class="px-3 py-2.5 rounded-xl bg-brand-50 hover:bg-brand-100 text-brand-700 border border-brand-200/80 text-xs font-semibold transition-all whitespace-nowrap flex items-center gap-1 shrink-0">
                                 <i class="fa-solid fa-wand-magic-sparkles"></i>
@@ -1071,13 +1071,25 @@
             appProgress = (cachedProgress && typeof cachedProgress === 'object') ? cachedProgress : {};
 
             try {
-                if (typeof __firebase_config !== 'undefined' && __firebase_config) {
-                    const firebaseConfig = JSON.parse(__firebase_config);
+                // Kết nối dự án Firebase của bạn (vocaflow-app-47bb4) khi chạy trên GitHub Pages
+                const firebaseConfig = (typeof __firebase_config !== 'undefined' && __firebase_config)
+                    ? JSON.parse(__firebase_config)
+                    : {
+                        apiKey: "AIzaSyDoxLXzY0OWZDe1IETkwnTJBpCqzQxT5Lg",
+                        authDomain: "vocaflow-app-47bb4.firebaseapp.com",
+                        projectId: "vocaflow-app-47bb4",
+                        storageBucket: "vocaflow-app-47bb4.firebasestorage.app",
+                        messagingSenderId: "541418273735",
+                        appId: "1:541418273735:web:b7075cca1626a0775577e2",
+                        measurementId: "G-NTGML1BRCV"
+                    };
+
+                if (firebaseConfig && firebaseConfig.apiKey) {
                     const app = initializeApp(firebaseConfig);
                     auth = getAuth(app);
                     db = getFirestore(app);
 
-                    // RULE 3: Auth before any Firestore query
+                    // Xác thực trước khi đọc/ghi Firestore
                     if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
                         await signInWithCustomToken(auth, __initial_auth_token);
                     } else {
@@ -1106,7 +1118,7 @@
 
             hideLoading();
 
-            // Auto-restore login session if saved
+            // Tự động giữ phiên đăng nhập nếu trước đó đã đăng nhập
             const savedUserId = safeStorage.get(LS_KEYS.SESSION);
             if (savedUserId) {
                 const foundUser = appUsers.find(u => u.id === savedUserId && !u.locked);
@@ -1134,7 +1146,6 @@
                     if (usersLoaded && topicsLoaded && progressLoaded) resolve();
                 };
 
-                // RULE 1: Strict public data paths
                 const usersCol = collection(db, 'artifacts', appId, 'public', 'data', 'vf_users');
                 const topicsCol = collection(db, 'artifacts', appId, 'public', 'data', 'vf_topics');
                 const progressCol = collection(db, 'artifacts', appId, 'public', 'data', 'vf_progress');
@@ -2332,6 +2343,7 @@
             renderFlashcard();
             showToast('Đã xáo trộn thứ tự thẻ!', 'info');
         };
+
         window.markCardStatus = async function(status) {
             const word = fcState.words[fcState.filteredIndices[fcState.currentIndex]];
             fcState.statuses[word.id] = status;
