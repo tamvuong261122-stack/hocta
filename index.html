@@ -915,6 +915,8 @@
         let editWordDebounceTimer = null;
         let activeAudioPlayer = null;
         let currentClientIp = null;
+        let currentSessionToken = null;
+        let isKickedByNewSession = false;
 
         // Flashcard State
         let fcState = {
@@ -1135,25 +1137,51 @@
             syncToLocalStorage();
 
             // Khôi phục phiên đăng nhập nếu có
-            const savedUid = safeStorage.get(LS_KEYS.SESSION);
+            const savedSession = safeStorage.get(LS_KEYS.SESSION);
+            const savedUid = typeof savedSession === 'string' ? savedSession : savedSession?.userId;
+            const savedToken = typeof savedSession === 'object' ? savedSession?.sessionToken : null;
+
             if (savedUid) {
                 const foundUser = appUsers.find(u => u.id === savedUid && !u.locked);
                 if (foundUser) {
-                    currentUser = {
-                        ...foundUser,
-                        lastIp: currentClientIp || foundUser.lastIp || 'Chưa ghi nhận'
-                    };
-                    if (currentClientIp && foundUser.lastIp !== currentClientIp) {
-                        saveUserDoc(currentUser);
+                    // Nếu tài khoản đã có phiên đăng nhập mới hơn thì không tự khôi phục phiên cũ
+                    if (savedToken && foundUser.activeSessionId && foundUser.activeSessionId !== savedToken) {
+                        safeStorage.remove(LS_KEYS.SESSION);
+                    } else {
+                        currentSessionToken = savedToken || foundUser.activeSessionId || generateSessionToken();
+                        currentUser = {
+                            ...foundUser,
+                            activeSessionId: currentSessionToken,
+                            lastIp: currentClientIp || foundUser.lastIp || 'Chưa ghi nhận'
+                        };
+                        safeStorage.set(LS_KEYS.SESSION, { userId: currentUser.id, sessionToken: currentSessionToken });
+                        if (!foundUser.activeSessionId || (currentClientIp && foundUser.lastIp !== currentClientIp)) {
+                            saveUserDoc(currentUser);
+                        }
+                        hideLoading();
+                        enterMainApp();
+                        return;
                     }
-                    hideLoading();
-                    enterMainApp();
-                    return;
                 }
             }
 
             hideLoading();
             showAuthScreen();
+        }
+
+        function generateSessionToken() {
+            return 'sess_' + Date.now() + '_' + Math.random().toString(36).slice(2, 10);
+        }
+
+        function enforceSingleActiveSession(userRecord) {
+            if (!currentUser || !userRecord || userRecord.id !== currentUser.id) return false;
+            if (isKickedByNewSession) return true;
+            if (userRecord.activeSessionId && currentSessionToken && userRecord.activeSessionId !== currentSessionToken) {
+                isKickedByNewSession = true;
+                handleLogout(true, 'Tài khoản của bạn vừa được đăng nhập ở một nơi khác!');
+                return true;
+            }
+            return false;
         }
 
         function startFirestoreListeners() {
@@ -1171,8 +1199,11 @@
                             const updatedSelf = appUsers.find(u => u.id === currentUser.id);
                             if (updatedSelf) {
                                 if (updatedSelf.locked) {
-                                    handleLogout();
+                                    handleLogout(true);
                                     showToast('Tài khoản của bạn đã bị khóa bởi quản trị viên.', 'error');
+                                    return;
+                                }
+                                if (enforceSingleActiveSession(updatedSelf)) {
                                     return;
                                 }
                                 currentUser = { ...currentUser, ...updatedSelf };
@@ -1470,6 +1501,8 @@
             const detectedIp = currentClientIp || (await fetchClientIp()) || 'Chưa ghi nhận';
             if (detectedIp && detectedIp !== 'Chưa ghi nhận') currentClientIp = detectedIp;
 
+            isKickedByNewSession = false;
+            currentSessionToken = generateSessionToken();
             const newUser = {
                 id: 'user_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
                 username,
@@ -1477,25 +1510,53 @@
                 password,
                 role: 'user',
                 locked: false,
+                activeSessionId: currentSessionToken,
                 lastIp: detectedIp,
                 createdAt: new Date().toISOString()
             };
 
             await saveUserDoc(newUser);
             currentUser = newUser;
-            safeStorage.set(LS_KEYS.SESSION, currentUser.id);
+            safeStorage.set(LS_KEYS.SESSION, { userId: currentUser.id, sessionToken: currentSessionToken });
             document.getElementById('register-form').reset();
             enterMainApp();
             showToast('Đăng ký tài khoản thành công!', 'success');
         };
 
-        window.handleLogout = function() {
+        window.handleLogout = function(kicked = false, reason = '') {
             currentUser = null;
             currentTopicId = null;
-            safeStorage.remove(LS_KEYS.SESSION);
+            currentSessionToken = null;
+            if (!kicked) {
+                isKickedByNewSession = false;
+                safeStorage.remove(LS_KEYS.SESSION);
+            }
             document.getElementById('login-form').reset();
             showAuthScreen();
+            if (kicked && reason) {
+                showToast(reason, 'error');
+            }
         };
+
+        function syncSessionAcrossTabs() {
+            if (!currentUser || isKickedByNewSession) return;
+            const latestUser = appUsers.find(u => u.id === currentUser.id);
+            if (latestUser) {
+                enforceSingleActiveSession(latestUser);
+            }
+        }
+
+        window.addEventListener('storage', (e) => {
+            if (e.key === LS_KEYS.USERS || e.key === LS_KEYS.SESSION) {
+                const latestUsers = safeStorage.get(LS_KEYS.USERS);
+                if (Array.isArray(latestUsers) && latestUsers.length > 0) {
+                    appUsers = latestUsers;
+                }
+                syncSessionAcrossTabs();
+            }
+        });
+
+        setInterval(syncSessionAcrossTabs, 2000);
 
         function enterMainApp() {
             document.getElementById('auth-screen').classList.add('hidden');
@@ -1504,61 +1565,48 @@
             shell.classList.add('flex');
             updateNavbarUser();
 
-            // Check if URL has ?share=CODE
-            const params = new URLSearchParams(window.location.search);
-            const shareParam = params.get('share');
-            if (shareParam) {
-                const matched = appTopics.find(t => (t.shareCode || '').toUpperCase() === shareParam.toUpperCase());
-                if (matched) {
-                    navigateTo('community');
-                    openTopicDetail(matched.id);
-                    return;
-                }
-            }
-            navigateTo(currentUser.role === 'admin' ? 'admin' : 'my-topics');
+            const adminNavDesktop = document.getElementById('nav-admin');
+            const adminNavMobile = document.getElementById('mnav-admin');
+            const isAdmin = currentUser && currentUser.role === 'admin';
+            if (adminNavDesktop) adminNavDesktop.classList.toggle('hidden', !isAdmin);
+            if (adminNavMobile) adminNavMobile.classList.toggle('hidden', !isAdmin);
+
+            const defaultView = isAdmin ? 'admin' : 'my-topics';
+            navigateTo(defaultView);
         }
 
         function updateNavbarUser() {
             if (!currentUser) return;
-            document.getElementById('user-display-name').textContent = currentUser.displayName;
-            document.getElementById('user-avatar').textContent = currentUser.displayName.charAt(0).toUpperCase();
-            const roleBadge = document.getElementById('user-role-badge');
-            const isAdmin = currentUser.role === 'admin';
-            roleBadge.textContent = isAdmin ? 'Quản trị viên' : 'Học viên';
-            roleBadge.className = isAdmin ? 'text-[10px] font-bold text-indigo-600' : 'text-[10px] font-semibold text-brand-600';
-
-            // Quản trị viên không có mục "Chủ đề của tôi" mà chỉ quản trị & xem Cộng đồng
-            document.getElementById('nav-my-topics').classList.toggle('hidden', isAdmin);
-            document.getElementById('mnav-my-topics').classList.toggle('hidden', isAdmin);
-            document.getElementById('nav-admin').classList.toggle('hidden', !isAdmin);
-            document.getElementById('mnav-admin').classList.toggle('hidden', !isAdmin);
+            const initial = (currentUser.displayName || currentUser.username || 'U').charAt(0).toUpperCase();
+            const avatarEl = document.getElementById('user-avatar');
+            const nameEl = document.getElementById('user-display-name');
+            const roleEl = document.getElementById('user-role-badge');
+            if (avatarEl) avatarEl.textContent = initial;
+            if (nameEl) nameEl.textContent = currentUser.displayName || currentUser.username;
+            if (roleEl) {
+                roleEl.textContent = currentUser.role === 'admin' ? 'Quản trị viên' : 'Học viên';
+            }
         }
 
-        // ============================================================
-        // 4. NAVIGATION
-        // ============================================================
         window.goHome = function() {
-            navigateTo(currentUser?.role === 'admin' ? 'admin' : 'my-topics');
+            if (!currentUser) return;
+            navigateTo(currentUser.role === 'admin' ? 'admin' : 'my-topics');
         };
 
         window.navigateTo = function(viewName) {
-            if (viewName === 'admin' && currentUser?.role !== 'admin') {
-                showToast('Bạn không có quyền truy cập trang Quản trị.', 'error');
-                return;
+            if (!currentUser) return;
+            if (viewName === 'admin' && currentUser.role !== 'admin') {
+                viewName = 'my-topics';
             }
-            if (viewName === 'my-topics' && currentUser?.role === 'admin') {
-                viewName = 'admin';
-            }
-            if (viewName === 'my-topics' || viewName === 'community' || viewName === 'admin') {
-                previousView = viewName;
+            if (currentView !== viewName && currentView !== 'flashcard' && currentView !== 'typing') {
+                previousView = currentView;
             }
             currentView = viewName;
 
             document.querySelectorAll('.app-view').forEach(v => v.classList.add('hidden'));
-            const target = document.getElementById('view-' + viewName);
-            if (target) target.classList.remove('hidden');
+            const targetView = document.getElementById('view-' + viewName);
+            if (targetView) targetView.classList.remove('hidden');
 
-            // Active styles for desktop & mobile nav
             document.querySelectorAll('.nav-btn').forEach(btn => {
                 btn.classList.remove('bg-white', 'text-brand-600', 'shadow-sm');
                 btn.classList.add('text-slate-600', 'hover:text-slate-900');
@@ -1581,441 +1629,6 @@
 
             refreshCurrentView();
             window.scrollTo({ top: 0, behavior: 'smooth' });
-        };
-
-        function refreshCurrentView() {
-            if (!currentUser) return;
-            if (currentView === 'my-topics') renderMyTopics();
-            else if (currentView === 'community') renderCommunityTopics();
-            else if (currentView === 'topic-detail' && currentTopicId) renderTopicDetail(currentTopicId);
-            else if (currentView === 'admin') renderAdminDashboard();
-        }
-
-        window.goBackFromDetail = function() {
-            navigateTo(previousView || (currentUser?.role === 'admin' ? 'admin' : 'my-topics'));
-        };
-
-        // ============================================================
-        // 5. MY TOPICS & COMMUNITY VIEWS
-        // ============================================================
-        window.renderMyTopics = function() {
-            const grid = document.getElementById('my-topics-grid');
-            const query = (document.getElementById('my-topics-search').value || '').toLowerCase().trim();
-            const myTopics = appTopics.filter(t => t.ownerId === currentUser.id &&
-                (t.title.toLowerCase().includes(query) || (t.description || '').toLowerCase().includes(query))
-            );
-
-            if (myTopics.length === 0) {
-                grid.innerHTML = `
-                    <div class="col-span-full bg-white rounded-3xl p-10 border border-dashed border-slate-300 text-center">
-                        <div class="w-14 h-14 rounded-2xl bg-brand-50 text-brand-500 flex items-center justify-center text-2xl mx-auto mb-3">
-                            <i class="fa-solid fa-folder-plus"></i>
-                        </div>
-                        <h3 class="text-base font-bold text-slate-800">Chưa có chủ đề nào</h3>
-                        <p class="text-sm text-slate-500 mt-1 mb-4">Hãy tạo bộ từ vựng đầu tiên hoặc sao chép từ mục Cộng đồng!</p>
-                        <button onclick="openTopicModal()" class="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold rounded-xl">
-                            <i class="fa-solid fa-plus mr-1"></i> Tạo chủ đề ngay
-                        </button>
-                    </div>`;
-                return;
-            }
-
-            grid.innerHTML = myTopics.map(t => buildTopicCard(t, true)).join('');
-        };
-
-        window.renderCommunityTopics = function() {
-            const grid = document.getElementById('community-grid');
-            const query = (document.getElementById('community-search').value || '').toLowerCase().trim();
-            const publicTopics = appTopics.filter(t => t.isPublic &&
-                (t.title.toLowerCase().includes(query) ||
-                 (t.description || '').toLowerCase().includes(query) ||
-                 (t.ownerName || '').toLowerCase().includes(query))
-            );
-
-            if (publicTopics.length === 0) {
-                grid.innerHTML = `
-                    <div class="col-span-full bg-white rounded-3xl p-10 border border-dashed border-slate-300 text-center">
-                        <p class="text-sm text-slate-500">Không tìm thấy chủ đề công khai nào phù hợp.</p>
-                    </div>`;
-                return;
-            }
-
-            grid.innerHTML = publicTopics.map(t => buildTopicCard(t, false)).join('');
-        };
-
-        function buildTopicCard(topic, isOwnerView) {
-            const wordCount = (topic.words || []).length;
-            const isMine = topic.ownerId === currentUser.id;
-            const visibilityBadge = topic.isPublic
-                ? `<span class="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200/70"><i class="fa-solid fa-globe mr-1"></i>Công khai</span>`
-                : `<span class="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-slate-100 text-slate-600"><i class="fa-solid fa-lock mr-1"></i>Riêng tư</span>`;
-
-            return `
-                <div class="bg-white rounded-3xl p-5 border border-slate-200/80 shadow-sm hover:shadow-md hover:border-brand-200 transition-all flex flex-col justify-between group">
-                    <div>
-                        <div class="flex items-center justify-between gap-2 mb-3">
-                            ${visibilityBadge}
-                            <span class="text-[11px] font-mono font-semibold text-slate-400 bg-slate-50 px-2 py-0.5 rounded-lg border border-slate-100">${escapeHtml(topic.shareCode || '')}</span>
-                        </div>
-                        <h3 onclick="openTopicDetail('${topic.id}')" class="text-lg font-extrabold text-slate-900 group-hover:text-brand-600 transition-colors cursor-pointer line-clamp-1">
-                            ${escapeHtml(topic.title)}
-                        </h3>
-                        <p class="text-xs text-slate-500 mt-1.5 line-clamp-2 min-h-[2rem]">${escapeHtml(topic.description || 'Chưa có mô tả cho chủ đề này.')}</p>
-                        <div class="flex items-center justify-between text-xs text-slate-500 mt-4 pt-3 border-t border-slate-100">
-                            <span class="font-semibold text-brand-700"><i class="fa-solid fa-layer-group mr-1"></i>${wordCount} từ vựng</span>
-                            <span class="truncate max-w-[140px]"><i class="fa-regular fa-user mr-1"></i>${escapeHtml(topic.ownerName || 'Ẩn danh')}</span>
-                        </div>
-                    </div>
-
-                    <div class="mt-4 pt-3 border-t border-slate-100 flex flex-wrap gap-2">
-                        <button onclick="startFlashcard('${topic.id}')" class="flex-1 py-2 px-3 bg-brand-600 hover:bg-brand-700 text-white text-xs font-semibold rounded-xl transition-all flex items-center justify-center gap-1.5">
-                            <i class="fa-solid fa-clone"></i> Flashcard
-                        </button>
-                        <button onclick="startTyping('${topic.id}')" class="flex-1 py-2 px-3 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-xl transition-all flex items-center justify-center gap-1.5">
-                            <i class="fa-solid fa-keyboard"></i> Luyện gõ
-                        </button>
-                        <button onclick="openTopicDetail('${topic.id}')" title="Xem & quản lý từ vựng" class="py-2 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-xl transition-all">
-                            <i class="fa-solid fa-list"></i>
-                        </button>
-                        ${isOwnerView || isMine ? `
-                            <button onclick="openShareModal('${topic.id}')" title="Chia sẻ" class="py-2 px-3 bg-brand-50 hover:bg-brand-100 text-brand-600 text-xs font-semibold rounded-xl transition-all">
-                                <i class="fa-solid fa-share-nodes"></i>
-                            </button>
-                            <button onclick="confirmDeleteTopic('${topic.id}')" title="Xóa chủ đề" class="py-2 px-3 bg-rose-50 hover:bg-rose-100 text-rose-600 text-xs font-semibold rounded-xl transition-all">
-                                <i class="fa-solid fa-trash"></i>
-                            </button>
-                        ` : (currentUser.role === 'admin' ? `
-                            <button onclick="confirmDeleteTopic('${topic.id}')" title="Xóa chủ đề (Quản trị)" class="py-2 px-3 bg-rose-50 hover:bg-rose-100 text-rose-600 text-xs font-semibold rounded-xl transition-all">
-                                <i class="fa-solid fa-trash"></i>
-                            </button>
-                        ` : `
-                            <button onclick="cloneTopic('${topic.id}')" title="Lưu bản sao về tài khoản của bạn" class="py-2 px-3 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 text-xs font-semibold rounded-xl transition-all">
-                                <i class="fa-solid fa-copy"></i>
-                            </button>
-                        `)}
-                    </div>
-                </div>
-            `;
-        }
-
-        window.handleOpenByShareCode = function(e) {
-            e.preventDefault();
-            const code = document.getElementById('share-code-input').value.trim().toUpperCase();
-            if (!code) return;
-            const found = appTopics.find(t => (t.shareCode || '').toUpperCase() === code);
-            if (!found) {
-                showToast(`Không tìm thấy chủ đề nào với mã "${code}".`, 'error');
-                return;
-            }
-            document.getElementById('share-code-input').value = '';
-            openTopicDetail(found.id);
-            showToast(`Đã mở chủ đề "${found.title}"!`, 'success');
-        };
-
-        // ============================================================
-        // 6. TOPIC CRUD, DETAIL & WORD MANAGEMENT
-        // ============================================================
-        window.openTopicModal = function(topicId = null) {
-            if (!topicId && currentUser?.role === 'admin') {
-                showToast('Quản trị viên không tạo chủ đề mới. Chủ đề chỉ dành cho tài khoản thường tạo!', 'info');
-                return;
-            }
-            const modal = document.getElementById('topic-modal');
-            const titleEl = document.getElementById('topic-modal-title');
-            document.getElementById('topic-modal-id').value = topicId || '';
-
-            if (topicId) {
-                const topic = appTopics.find(t => t.id === topicId);
-                if (!topic) return;
-                titleEl.textContent = 'Chỉnh sửa chủ đề';
-                document.getElementById('topic-modal-name').value = topic.title;
-                document.getElementById('topic-modal-desc').value = topic.description || '';
-                document.getElementById('topic-modal-public').checked = !!topic.isPublic;
-            } else {
-                titleEl.textContent = 'Tạo chủ đề mới';
-                document.getElementById('topic-modal-name').value = '';
-                document.getElementById('topic-modal-desc').value = '';
-                document.getElementById('topic-modal-public').checked = false;
-            }
-            modal.classList.remove('hidden');
-        };
-
-        window.handleSaveTopic = async function(e) {
-            e.preventDefault();
-            const id = document.getElementById('topic-modal-id').value;
-            if (!id && currentUser?.role === 'admin') {
-                showToast('Quản trị viên không tạo chủ đề mới!', 'error');
-                closeModal('topic-modal');
-                return;
-            }
-            const title = document.getElementById('topic-modal-name').value.trim();
-            const description = document.getElementById('topic-modal-desc').value.trim();
-            const isPublic = document.getElementById('topic-modal-public').checked;
-
-            if (id) {
-                const existing = appTopics.find(t => t.id === id);
-                if (!existing) return;
-                const updated = { ...existing, title, description, isPublic };
-                await saveTopicDoc(updated);
-                showToast('Đã cập nhật thông tin chủ đề!', 'success');
-            } else {
-                const newTopic = {
-                    id: 'topic_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
-                    title,
-                    description,
-                    ownerId: currentUser.id,
-                    ownerName: currentUser.displayName,
-                    isPublic,
-                    shareCode: 'VOC-' + Math.random().toString(36).substring(2, 6).toUpperCase(),
-                    createdAt: new Date().toISOString(),
-                    words: []
-                };
-                await saveTopicDoc(newTopic);
-                showToast('Đã tạo chủ đề mới! Hãy thêm từ vựng nhé.', 'success');
-                closeModal('topic-modal');
-                openTopicDetail(newTopic.id);
-                return;
-            }
-
-            closeModal('topic-modal');
-            refreshCurrentView();
-        };
-
-        window.confirmDeleteTopic = function(topicId) {
-            const topic = appTopics.find(t => t.id === topicId);
-            if (!topic) return;
-            openConfirmModal(
-                'Xóa chủ đề?',
-                `Bạn có chắc chắn muốn xóa chủ đề "${topic.title}" cùng toàn bộ từ vựng bên trong?`,
-                async () => {
-                    await deleteTopicDoc(topicId);
-                    showToast('Đã xóa chủ đề thành công.', 'success');
-                    if (currentView === 'topic-detail' && currentTopicId === topicId) {
-                        navigateTo('my-topics');
-                    } else {
-                        refreshCurrentView();
-                    }
-                }
-            );
-        };
-
-        window.cloneTopic = async function(topicId) {
-            if (currentUser?.role === 'admin') {
-                showToast('Quản trị viên không sao chép chủ đề về tài khoản quản trị.', 'info');
-                return;
-            }
-            const original = appTopics.find(t => t.id === topicId);
-            if (!original) return;
-            const cloned = {
-                id: 'topic_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
-                title: original.title + ' (Bản sao)',
-                description: original.description || '',
-                ownerId: currentUser.id,
-                ownerName: currentUser.displayName,
-                isPublic: false,
-                shareCode: 'VOC-' + Math.random().toString(36).substring(2, 6).toUpperCase(),
-                createdAt: new Date().toISOString(),
-                words: (original.words || []).map(w => ({ ...w, id: 'w_' + Math.random().toString(36).slice(2, 8) }))
-            };
-            await saveTopicDoc(cloned);
-            showToast('Đã sao chép chủ đề về mục "Chủ đề của tôi"!', 'success');
-            navigateTo('my-topics');
-        };
-
-        window.openTopicDetail = function(topicId) {
-            currentTopicId = topicId;
-            navigateTo('topic-detail');
-        };
-
-        function renderTopicDetail(topicId) {
-            const topic = appTopics.find(t => t.id === topicId);
-            if (!topic) {
-                navigateTo('my-topics');
-                return;
-            }
-
-            const canEdit = topic.ownerId === currentUser.id || currentUser.role === 'admin';
-
-            document.getElementById('detail-title').textContent = topic.title;
-            document.getElementById('detail-desc').textContent = topic.description || 'Chưa có mô tả.';
-            document.getElementById('detail-code-badge').textContent = 'Mã: ' + (topic.shareCode || '');
-            document.getElementById('detail-author-badge').innerHTML = `<i class="fa-regular fa-user mr-1"></i>Tác giả: ${escapeHtml(topic.ownerName || 'Ẩn danh')}`;
-
-            const visBadge = document.getElementById('detail-visibility-badge');
-            if (topic.isPublic) {
-                visBadge.className = 'px-2.5 py-1 rounded-lg text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200';
-                visBadge.innerHTML = '<i class="fa-solid fa-globe mr-1"></i>Công khai';
-            } else {
-                visBadge.className = 'px-2.5 py-1 rounded-lg text-xs font-bold bg-slate-100 text-slate-600';
-                visBadge.innerHTML = '<i class="fa-solid fa-lock mr-1"></i>Riêng tư';
-            }
-
-            document.getElementById('add-word-panel').classList.toggle('hidden', !canEdit);
-            document.getElementById('detail-edit-topic-btn').classList.toggle('hidden', !canEdit);
-            document.getElementById('detail-share-btn').classList.toggle('hidden', !canEdit);
-            document.getElementById('detail-clone-btn').classList.toggle('hidden', topic.ownerId === currentUser.id || currentUser.role === 'admin');
-
-            const words = topic.words || [];
-            document.getElementById('detail-word-count').textContent = words.length;
-
-            // Show bulk IPA button if user can edit and at least one word is missing phonetic
-            const missingIpaCount = words.filter(w => !w.phonetic || !w.phonetic.trim()).length;
-            const bulkBtn = document.getElementById('btn-bulk-ipa');
-            const bulkText = document.getElementById('btn-bulk-ipa-text');
-            if (canEdit && missingIpaCount > 0) {
-                bulkBtn.classList.remove('hidden');
-                bulkText.textContent = `Tự động điền IPA cho ${missingIpaCount} từ còn thiếu`;
-            } else {
-                bulkBtn.classList.add('hidden');
-            }
-
-            const listEl = document.getElementById('detail-words-list');
-
-            if (words.length === 0) {
-                listEl.innerHTML = `<div class="p-8 text-center text-sm text-slate-400">Chủ đề này chưa có từ vựng nào. Hãy thêm từ ở khung phía trên!</div>`;
-                return;
-            }
-
-            listEl.innerHTML = words.map((w, idx) => `
-                <div class="px-6 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-slate-50/80 transition-colors">
-                    <div class="flex items-start gap-3.5">
-                        <span class="w-7 h-7 rounded-lg bg-brand-50 text-brand-600 text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">${idx + 1}</span>
-                        <div>
-                            <div class="flex flex-wrap items-center gap-2">
-                                <span class="font-bold text-slate-900 text-base">${escapeHtml(w.en)}</span>
-                                ${w.phonetic ? `<span class="text-xs font-mono text-brand-700 bg-brand-50/80 px-2 py-0.5 rounded-md">${escapeHtml(w.phonetic)}</span>` : ''}
-                                <button onclick="speakWordById('${w.id}')" class="w-7 h-7 rounded-full hover:bg-brand-100 ${w.audio ? 'text-emerald-600 bg-emerald-50' : 'text-brand-600'} flex items-center justify-center transition-all" title="${w.audio ? 'Phát âm chuẩn bản xứ (Audio)' : 'Phát âm (Speech API)'}">
-                                    <i class="fa-solid fa-volume-high text-xs"></i>
-                                </button>
-                            </div>
-                            <div class="text-sm text-slate-600 mt-0.5">${escapeHtml(w.vi)}</div>
-                        </div>
-                    </div>
-                    ${canEdit ? `
-                        <div class="flex items-center gap-1.5 self-end sm:self-center">
-                            <button onclick="openEditWordModal('${w.id}')" class="p-2 rounded-lg text-slate-400 hover:text-brand-600 hover:bg-brand-50 transition-all" title="Sửa từ">
-                                <i class="fa-solid fa-pen text-xs"></i>
-                            </button>
-                            <button onclick="deleteWord('${w.id}')" class="p-2 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-all" title="Xóa từ">
-                                <i class="fa-solid fa-trash text-xs"></i>
-                            </button>
-                        </div>
-                    ` : ''}
-                </div>
-            `).join('');
-        }
-
-        // ============================================================
-        // 6B. FREE DICTIONARY API (AUTO IPA & NATIVE AUDIO)
-        // ============================================================
-        async function lookupDictionaryIPA(rawWord) {
-            const cleaned = (rawWord || '').trim().toLowerCase();
-            if (!cleaned) return { found: false, reason: 'empty' };
-
-            try {
-                const res = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(cleaned)}`);
-                if (!res.ok) {
-                    return { found: false, reason: 'not_found' };
-                }
-                const data = await res.json();
-                if (!Array.isArray(data) || data.length === 0) {
-                    return { found: false, reason: 'not_found' };
-                }
-
-                let phonetic = '';
-                let audio = '';
-
-                for (const entry of data) {
-                    if (!phonetic && entry.phonetic) {
-                        phonetic = entry.phonetic;
-                    }
-                    if (Array.isArray(entry.phonetics)) {
-                        for (const p of entry.phonetics) {
-                            if (!phonetic && p.text) phonetic = p.text;
-                            if (!audio && p.audio) audio = p.audio;
-                        }
-                    }
-                    if (phonetic && audio) break;
-                }
-
-                if (phonetic || audio) {
-                    return { found: true, phonetic, audio };
-                }
-                return { found: false, reason: 'no_ipa' };
-            } catch (err) {
-                console.warn('Dictionary API error:', err);
-                return { found: false, reason: 'network' };
-            }
-        }
-
-        function setIpaStatusUI(elId, type, message) {
-            const el = document.getElementById(elId);
-            if (!el) return;
-            if (!type) {
-                el.classList.add('hidden');
-                return;
-            }
-            el.classList.remove('hidden');
-            if (type === 'loading') {
-                el.className = 'mt-2.5 text-xs font-medium flex items-center gap-1.5 text-brand-600';
-                el.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i><span>${escapeHtml(message)}</span>`;
-            } else if (type === 'success') {
-                el.className = 'mt-2.5 text-xs font-medium flex items-center gap-1.5 text-emerald-600';
-                el.innerHTML = `<i class="fa-solid fa-circle-check"></i><span>${escapeHtml(message)}</span>`;
-            } else {
-                el.className = 'mt-2.5 text-xs font-medium flex items-center gap-1.5 text-amber-600';
-                el.innerHTML = `<i class="fa-solid fa-circle-info"></i><span>${escapeHtml(message)}</span>`;
-            }
-        }
-
-        window.onNewWordInput = function() {
-            clearTimeout(newWordDebounceTimer);
-            const word = document.getElementById('new-word-en').value.trim();
-            document.getElementById('new-word-audio').value = '';
-            if (!word) {
-                setIpaStatusUI('new-ipa-status', null);
-                return;
-            }
-            newWordDebounceTimer = setTimeout(() => {
-                fetchNewWordIPA(true);
-            }, 600);
-        };
-
-        window.fetchNewWordIPA = async function(isAuto = false) {
-            const word = document.getElementById('new-word-en').value.trim();
-            if (!word) {
-                if (!isAuto) showToast('Vui lòng nhập từ tiếng Anh trước khi lấy IPA!', 'info');
-                return;
-            }
-            setIpaStatusUI('new-ipa-status', 'loading', `Đang tra phiên âm IPA cho "${word}"...`);
-            const result = await lookupDictionaryIPA(word);
-
-            // Ensure input hasn't changed while fetching
-            if (document.getElementById('new-word-en').value.trim() !== word) return;
-
-            if (result.found) {
-                if (result.phonetic) document.getElementById('new-word-phonetic').value = result.phonetic;
-                document.getElementById('new-word-audio').value = result.audio || '';
-                const msg = result.audio
-                    ? `Đã tìm thấy phiên âm ${result.phonetic || ''} kèm âm thanh chuẩn!`
-                    : `Đã tìm thấy phiên âm ${result.phonetic}!`;
-                setIpaStatusUI('new-ipa-status', 'success', msg);
-            } else {
-                document.getElementById('new-word-audio').value = '';
-                setIpaStatusUI('new-ipa-status', 'warn', `Không có trong từ điển (có thể là cụm từ hoặc tên riêng) — bạn có thể tự gõ phiên âm.`);
-            }
-        };
-
-        window.onEditWordInput = function() {
-            clearTimeout(editWordDebounceTimer);
-            const word = document.getElementById('edit-word-en').value.trim();
-            if (!word) {
-                setIpaStatusUI('edit-ipa-status', null);
-                return;
-            }
-            editWordDebounceTimer = setTimeout(() => {
-                fetchEditWordIPA(true);
-            }, 600);
         };
 
         window.fetchEditWordIPA = async function(isAuto = false) {
