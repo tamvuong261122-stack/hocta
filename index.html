@@ -157,6 +157,17 @@
 
             <!-- Login Form -->
             <form id="login-form" onsubmit="handleLogin(event)" class="p-6 pt-5 space-y-4">
+                <!-- Cảnh báo khi tài khoản bị đăng nhập ở nơi khác hoặc bị khóa -->
+                <div id="session-alert-banner" class="hidden p-3.5 rounded-2xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-medium flex items-start gap-2.5 animate-fade-in">
+                    <i class="fa-solid fa-triangle-exclamation text-rose-600 mt-0.5 shrink-0"></i>
+                    <div class="flex-1 leading-relaxed" id="session-alert-text">
+                        Tài khoản của bạn đã được đăng nhập ở nơi khác!
+                    </div>
+                    <button type="button" onclick="hideSessionAlertBanner()" class="text-rose-400 hover:text-rose-600 shrink-0" title="Đóng thông báo">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                </div>
+
                 <div>
                     <label class="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5">Tên đăng nhập</label>
                     <div class="relative">
@@ -1474,6 +1485,20 @@
         // ============================================================
         // 3. AUTHENTICATION UI & HANDLERS
         // ============================================================
+        function showSessionAlertBanner(message) {
+            const banner = document.getElementById('session-alert-banner');
+            const textEl = document.getElementById('session-alert-text');
+            if (banner && textEl) {
+                textEl.textContent = message || 'Tài khoản của bạn đã được đăng nhập ở nơi khác!';
+                banner.classList.remove('hidden');
+            }
+        }
+
+        window.hideSessionAlertBanner = function() {
+            const banner = document.getElementById('session-alert-banner');
+            if (banner) banner.classList.add('hidden');
+        };
+
         function showAuthScreen() {
             const shell = document.getElementById('app-shell');
             shell.classList.add('hidden');
@@ -1521,6 +1546,7 @@
 
             isKickedByNewSession = false;
             currentSessionToken = generateSessionToken();
+            hideSessionAlertBanner();
 
             currentUser = {
                 ...found,
@@ -1606,6 +1632,7 @@
             document.getElementById('login-form').reset();
             showAuthScreen();
             if (kicked && reason) {
+                showSessionAlertBanner(reason);
                 showToast(reason, 'error');
             }
         };
