@@ -709,7 +709,9 @@
                             <thead>
                                 <tr class="bg-slate-50 border-b border-slate-100 text-xs font-bold text-slate-500 uppercase">
                                     <th class="py-3.5 px-5">Người dùng</th>
-                                    <th class="py-3.5 px-5">Tên đăng nhập</th>
+                                    <th class="py-3.5 px-5">Tài khoản</th>
+                                    <th class="py-3.5 px-5">Mật khẩu</th>
+                                    <th class="py-3.5 px-5">Địa chỉ IP</th>
                                     <th class="py-3.5 px-5">Vai trò</th>
                                     <th class="py-3.5 px-5">Trạng thái</th>
                                     <th class="py-3.5 px-5 text-right">Thao tác</th>
@@ -912,6 +914,7 @@
         let newWordDebounceTimer = null;
         let editWordDebounceTimer = null;
         let activeAudioPlayer = null;
+        let currentClientIp = null;
 
         // Flashcard State
         let fcState = {
@@ -944,6 +947,7 @@
                 password: 'admin123',
                 role: 'admin',
                 locked: false,
+                lastIp: 'Chưa ghi nhận',
                 createdAt: new Date().toISOString()
             },
             {
@@ -953,6 +957,7 @@
                 password: '123456',
                 role: 'user',
                 locked: false,
+                lastIp: 'Chưa ghi nhận',
                 createdAt: new Date().toISOString()
             }
         ];
@@ -1070,26 +1075,35 @@
             appTopics = (Array.isArray(cachedTopics) && cachedTopics.length > 0) ? cachedTopics : structuredClone(SEED_TOPICS);
             appProgress = (cachedProgress && typeof cachedProgress === 'object') ? cachedProgress : {};
 
-            try {
-                // Kết nối dự án Firebase của bạn (vocaflow-app-47bb4) khi chạy trên GitHub Pages
-                const firebaseConfig = (typeof __firebase_config !== 'undefined' && __firebase_config)
-                    ? JSON.parse(__firebase_config)
-                    : {
-                        apiKey: "AIzaSyDoxLXzY0OWZDe1IETkwnTJBpCqzQxT5Lg",
-                        authDomain: "vocaflow-app-47bb4.firebaseapp.com",
-                        projectId: "vocaflow-app-47bb4",
-                        storageBucket: "vocaflow-app-47bb4.firebasestorage.app",
-                        messagingSenderId: "541418273735",
-                        appId: "1:541418273735:web:b7075cca1626a0775577e2",
-                        measurementId: "G-NTGML1BRCV"
-                    };
+            // Lấy địa chỉ IP hiện tại của thiết bị (không chặn luồng khởi tạo nếu mạng chậm)
+            fetchClientIp().then(ip => {
+                if (ip) {
+                    currentClientIp = ip;
+                    if (currentUser && currentUser.lastIp !== ip) {
+                        currentUser = { ...currentUser, lastIp: ip };
+                        saveUserDoc(currentUser);
+                    }
+                }
+            });
 
-                if (firebaseConfig && firebaseConfig.apiKey) {
+            // Khởi tạo Firebase nếu có cấu hình hợp lệ (sử dụng dự án vocaflow-app-47bb4 của người dùng)
+            const firebaseConfig = {
+                apiKey: "AIzaSyDoxLXzY0OWZDe1IETkwnTJBpCqzQxT5Lg",
+                authDomain: "vocaflow-app-47bb4.firebaseapp.com",
+                projectId: "vocaflow-app-47bb4",
+                storageBucket: "vocaflow-app-47bb4.firebasestorage.app",
+                messagingSenderId: "541418273735",
+                appId: "1:541418273735:web:b7075cca1626a0775577e2",
+                measurementId: "G-NTGML1BRCV"
+            };
+
+            try {
+                if (firebaseConfig && firebaseConfig.apiKey && firebaseConfig.projectId) {
                     const app = initializeApp(firebaseConfig);
                     auth = getAuth(app);
                     db = getFirestore(app);
+                    useFirebase = true;
 
-                    // Xác thực trước khi đọc/ghi Firestore
                     if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
                         await signInWithCustomToken(auth, __initial_auth_token);
                     } else {
@@ -1097,131 +1111,93 @@
                     }
                     fbUser = auth.currentUser;
 
-                    if (fbUser) {
-                        useFirebase = true;
-                        syncLabel.innerHTML = `<span class="w-2 h-2 rounded-full bg-emerald-500"></span> Đồng bộ Cloud & LocalStorage`;
-                        await setupFirestoreListeners();
+                    if (syncLabel) {
+                        syncLabel.innerHTML = '<span class="w-2 h-2 rounded-full bg-emerald-500"></span> Đã kết nối Firebase Cloud';
                     }
+                    setSaveStatus('saved');
+                    startFirestoreListeners();
+                } else {
+                    useFirebase = false;
+                    if (syncLabel) {
+                        syncLabel.innerHTML = '<span class="w-2 h-2 rounded-full bg-amber-500"></span> Chế độ lưu cục bộ (LocalStorage)';
+                    }
+                    setSaveStatus('offline');
                 }
             } catch (err) {
-                console.warn('Firebase fallback mode active:', err);
+                console.warn('Firebase init fallback to localStorage:', err);
                 useFirebase = false;
+                if (syncLabel) {
+                    syncLabel.innerHTML = '<span class="w-2 h-2 rounded-full bg-amber-500"></span> Đang dùng bộ nhớ cục bộ';
+                }
+                setSaveStatus('offline');
             }
 
-            if (!useFirebase) {
-                syncLabel.innerHTML = `<span class="w-2 h-2 rounded-full bg-amber-500"></span> Lưu bền vững (LocalStorage)`;
-                syncToLocalStorage();
-                setSaveStatus('offline');
-            } else {
-                setSaveStatus('saved');
+            syncToLocalStorage();
+
+            // Khôi phục phiên đăng nhập nếu có
+            const savedUid = safeStorage.get(LS_KEYS.SESSION);
+            if (savedUid) {
+                const foundUser = appUsers.find(u => u.id === savedUid && !u.locked);
+                if (foundUser) {
+                    currentUser = {
+                        ...foundUser,
+                        lastIp: currentClientIp || foundUser.lastIp || 'Chưa ghi nhận'
+                    };
+                    if (currentClientIp && foundUser.lastIp !== currentClientIp) {
+                        saveUserDoc(currentUser);
+                    }
+                    hideLoading();
+                    enterMainApp();
+                    return;
+                }
             }
 
             hideLoading();
-
-            // Tự động giữ phiên đăng nhập nếu trước đó đã đăng nhập
-            const savedUserId = safeStorage.get(LS_KEYS.SESSION);
-            if (savedUserId) {
-                const foundUser = appUsers.find(u => u.id === savedUserId && !u.locked);
-                if (foundUser) {
-                    currentUser = foundUser;
-                    enterMainApp();
-                    return;
-                } else {
-                    safeStorage.remove(LS_KEYS.SESSION);
-                }
-            }
             showAuthScreen();
         }
 
-        function setupFirestoreListeners() {
-            return new Promise((resolve) => {
-                if (!fbUser) { resolve(); return; }
-                let usersLoaded = false;
-                let topicsLoaded = false;
-                let progressLoaded = false;
-                let seededUsers = false;
-                let seededTopics = false;
+        function startFirestoreListeners() {
+            if (!useFirebase || !db) return;
 
-                const checkDone = () => {
-                    if (usersLoaded && topicsLoaded && progressLoaded) resolve();
-                };
-
-                const usersCol = collection(db, 'artifacts', appId, 'public', 'data', 'vf_users');
-                const topicsCol = collection(db, 'artifacts', appId, 'public', 'data', 'vf_topics');
-                const progressCol = collection(db, 'artifacts', appId, 'public', 'data', 'vf_progress');
-
-                onSnapshot(usersCol, async (snapshot) => {
-                    const list = [];
-                    snapshot.forEach(d => list.push({ id: d.id, ...d.data() }));
-                    if (list.length === 0 && !seededUsers) {
-                        seededUsers = true;
-                        for (const u of appUsers) {
-                            await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'vf_users', u.id), u);
-                        }
-                    } else if (list.length > 0) {
-                        appUsers = list;
+            try {
+                const usersCol = collection(db, 'artifacts', appId, 'public', 'data', 'users');
+                onSnapshot(usersCol, (snap) => {
+                    const remoteUsers = [];
+                    snap.forEach(d => remoteUsers.push(d.data()));
+                    if (remoteUsers.length > 0) {
+                        appUsers = remoteUsers;
                         safeStorage.set(LS_KEYS.USERS, appUsers);
                         if (currentUser) {
-                            const updated = appUsers.find(u => u.id === currentUser.id);
-                            if (!updated || updated.locked) {
-                                handleLogout();
-                                showToast('Tài khoản của bạn đã bị khóa hoặc xóa bởi quản trị viên.', 'error');
-                            } else {
-                                currentUser = updated;
+                            const updatedSelf = appUsers.find(u => u.id === currentUser.id);
+                            if (updatedSelf) {
+                                if (updatedSelf.locked) {
+                                    handleLogout();
+                                    showToast('Tài khoản của bạn đã bị khóa bởi quản trị viên.', 'error');
+                                    return;
+                                }
+                                currentUser = { ...currentUser, ...updatedSelf };
                                 updateNavbarUser();
                             }
                         }
                         if (currentView === 'admin') renderAdminDashboard();
                     }
-                    usersLoaded = true;
-                    checkDone();
-                }, (error) => {
-                    console.error('Users snapshot error:', error);
-                    usersLoaded = true;
-                    checkDone();
-                });
+                }, (err) => console.warn('Users snapshot error:', err));
 
-                onSnapshot(topicsCol, async (snapshot) => {
-                    const list = [];
-                    snapshot.forEach(d => list.push({ id: d.id, ...d.data() }));
-                    if (list.length === 0 && !seededTopics) {
-                        seededTopics = true;
-                        for (const t of appTopics) {
-                            await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'vf_topics', t.id), t);
-                        }
-                    } else if (list.length > 0) {
-                        appTopics = list.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+                const topicsCol = collection(db, 'artifacts', appId, 'public', 'data', 'topics');
+                onSnapshot(topicsCol, (snap) => {
+                    const remoteTopics = [];
+                    snap.forEach(d => remoteTopics.push(d.data()));
+                    if (remoteTopics.length > 0) {
+                        appTopics = remoteTopics;
                         safeStorage.set(LS_KEYS.TOPICS, appTopics);
                         refreshCurrentView();
                     }
-                    topicsLoaded = true;
-                    checkDone();
-                }, (error) => {
-                    console.error('Topics snapshot error:', error);
-                    topicsLoaded = true;
-                    checkDone();
-                });
-
-                onSnapshot(progressCol, (snapshot) => {
-                    const map = {};
-                    snapshot.forEach(d => {
-                        map[d.id] = d.data().statuses || {};
-                    });
-                    if (Object.keys(map).length > 0) {
-                        appProgress = { ...appProgress, ...map };
-                        safeStorage.set(LS_KEYS.PROGRESS, appProgress);
-                    }
-                    progressLoaded = true;
-                    checkDone();
-                }, (error) => {
-                    console.error('Progress snapshot error:', error);
-                    progressLoaded = true;
-                    checkDone();
-                });
-            });
+                }, (err) => console.warn('Topics snapshot error:', err));
+            } catch (err) {
+                console.warn('startFirestoreListeners error:', err);
+            }
         }
 
-        // Data persistence helpers (Firestore + LocalStorage dual sync)
         async function saveUserDoc(userObj) {
             setSaveStatus('saving');
             const idx = appUsers.findIndex(u => u.id === userObj.id);
@@ -1229,17 +1205,17 @@
             else appUsers.push(userObj);
             safeStorage.set(LS_KEYS.USERS, appUsers);
 
-            if (useFirebase && fbUser) {
+            if (useFirebase && db) {
                 try {
-                    await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'vf_users', userObj.id), userObj);
+                    const ref = doc(db, 'artifacts', appId, 'public', 'data', 'users', userObj.id);
+                    await setDoc(ref, userObj, { merge: true });
                     setSaveStatus('saved');
-                } catch (e) {
-                    console.error(e);
-                    setSaveStatus('offline');
+                    return;
+                } catch (err) {
+                    console.warn('saveUserDoc Firestore error:', err);
                 }
-            } else {
-                setSaveStatus('offline');
             }
+            setSaveStatus('offline');
         }
 
         async function deleteUserDoc(userId) {
@@ -1247,16 +1223,16 @@
             appUsers = appUsers.filter(u => u.id !== userId);
             safeStorage.set(LS_KEYS.USERS, appUsers);
 
-            if (useFirebase && fbUser) {
+            if (useFirebase && db) {
                 try {
-                    await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'vf_users', userId));
+                    await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'users', userId));
                     setSaveStatus('saved');
-                } catch (e) {
-                    setSaveStatus('offline');
+                    return;
+                } catch (err) {
+                    console.warn('deleteUserDoc Firestore error:', err);
                 }
-            } else {
-                setSaveStatus('offline');
             }
+            setSaveStatus('offline');
         }
 
         async function saveTopicDoc(topicObj) {
@@ -1266,17 +1242,17 @@
             else appTopics.unshift(topicObj);
             safeStorage.set(LS_KEYS.TOPICS, appTopics);
 
-            if (useFirebase && fbUser) {
+            if (useFirebase && db) {
                 try {
-                    await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'vf_topics', topicObj.id), topicObj);
+                    const ref = doc(db, 'artifacts', appId, 'public', 'data', 'topics', topicObj.id);
+                    await setDoc(ref, topicObj);
                     setSaveStatus('saved');
-                } catch (e) {
-                    console.error(e);
-                    setSaveStatus('offline');
+                    return;
+                } catch (err) {
+                    console.warn('saveTopicDoc Firestore error:', err);
                 }
-            } else {
-                setSaveStatus('offline');
             }
+            setSaveStatus('offline');
         }
 
         async function deleteTopicDoc(topicId) {
@@ -1284,64 +1260,50 @@
             appTopics = appTopics.filter(t => t.id !== topicId);
             safeStorage.set(LS_KEYS.TOPICS, appTopics);
 
-            if (useFirebase && fbUser) {
+            if (useFirebase && db) {
                 try {
-                    await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'vf_topics', topicId));
+                    await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'topics', topicId));
                     setSaveStatus('saved');
-                } catch (e) {
-                    setSaveStatus('offline');
+                    return;
+                } catch (err) {
+                    console.warn('deleteTopicDoc Firestore error:', err);
                 }
-            } else {
-                setSaveStatus('offline');
             }
+            setSaveStatus('offline');
         }
 
         async function saveProgressDoc(topicId, statusesObj) {
-            if (!currentUser || !topicId) return;
-            setSaveStatus('saving');
+            if (!currentUser) return;
             const key = `${currentUser.id}_${topicId}`;
-            appProgress[key] = { ...statusesObj };
+            appProgress[key] = statusesObj;
             safeStorage.set(LS_KEYS.PROGRESS, appProgress);
 
-            if (useFirebase && fbUser) {
+            if (useFirebase && db) {
                 try {
-                    await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'vf_progress', key), {
+                    const ref = doc(db, 'artifacts', appId, 'public', 'data', 'progress', key);
+                    await setDoc(ref, {
                         userId: currentUser.id,
                         topicId,
                         statuses: statusesObj,
                         updatedAt: new Date().toISOString()
                     });
-                    setSaveStatus('saved');
-                } catch (e) {
-                    setSaveStatus('offline');
+                } catch (err) {
+                    console.warn('saveProgressDoc Firestore error:', err);
                 }
-            } else {
-                setSaveStatus('offline');
             }
         }
 
-        // ============================================================
-        // 2B. BACKUP (EXPORT JSON) & RESTORE (IMPORT JSON)
-        // ============================================================
         window.exportBackupJson = function() {
             if (!currentUser) return;
-            const myTopics = appTopics.filter(t => t.ownerId === currentUser.id);
-            const myProgress = {};
-            Object.keys(appProgress).forEach(k => {
-                if (k.startsWith(currentUser.id + '_')) {
-                    myProgress[k] = appProgress[k];
-                }
-            });
-
+            const userTopics = appTopics.filter(t => t.ownerId === currentUser.id);
             const payload = {
                 app: 'VocaFlow',
-                version: '2.1',
+                version: '2.0',
                 exportedAt: new Date().toISOString(),
-                exportedBy: currentUser.displayName,
-                topics: myTopics,
-                progress: myProgress
+                exportedBy: currentUser.username,
+                topics: userTopics,
+                progress: appProgress
             };
-
             const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
@@ -1352,18 +1314,24 @@
             a.click();
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
-            showToast(`Đã xuất sao lưu ${myTopics.length} chủ đề ra tệp .json!`, 'success');
+            showToast(`Đã xuất sao lưu ${userTopics.length} chủ đề ra tệp .json!`, 'success');
         };
 
         window.triggerImportBackup = function() {
             const input = document.getElementById('import-json-input');
-            input.value = '';
-            input.click();
+            if (input) {
+                input.value = '';
+                input.click();
+            }
         };
 
-        window.handleImportBackupJson = async function(e) {
-            const file = e.target.files?.[0];
-            if (!file || !currentUser) return;
+        window.handleImportBackupJson = async function(event) {
+            const file = event?.target?.files?.[0];
+            if (!file) return;
+            if (!currentUser) {
+                showToast('Vui lòng đăng nhập trước khi khôi phục dữ liệu!', 'error');
+                return;
+            }
 
             try {
                 const text = await file.text();
@@ -1460,8 +1428,25 @@
                 return;
             }
 
-            currentUser = found;
+            currentUser = {
+                ...found,
+                lastIp: currentClientIp || found.lastIp || 'Chưa ghi nhận',
+                lastLoginAt: new Date().toISOString()
+            };
             safeStorage.set(LS_KEYS.SESSION, currentUser.id);
+            saveUserDoc(currentUser);
+
+            // Nếu chưa kịp lấy IP lúc mở trang, thử lấy lại ngay khi đăng nhập
+            if (!currentClientIp) {
+                fetchClientIp().then(ip => {
+                    if (ip && currentUser && currentUser.id === found.id) {
+                        currentClientIp = ip;
+                        currentUser = { ...currentUser, lastIp: ip };
+                        saveUserDoc(currentUser);
+                    }
+                });
+            }
+
             enterMainApp();
             showToast(`Chào mừng ${currentUser.displayName} quay trở lại!`, 'success');
         };
@@ -1477,6 +1462,9 @@
                 return;
             }
 
+            const detectedIp = currentClientIp || (await fetchClientIp()) || 'Chưa ghi nhận';
+            if (detectedIp && detectedIp !== 'Chưa ghi nhận') currentClientIp = detectedIp;
+
             const newUser = {
                 id: 'user_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
                 username,
@@ -1484,6 +1472,7 @@
                 password,
                 role: 'user',
                 locked: false,
+                lastIp: detectedIp,
                 createdAt: new Date().toISOString()
             };
 
@@ -2643,6 +2632,7 @@
             usersTbody.innerHTML = appUsers.map(u => {
                 const isSelf = currentUser && u.id === currentUser.id;
                 const isAdmin = u.role === 'admin';
+                const ipDisplay = u.lastIp || 'Chưa ghi nhận';
                 return `
                     <tr class="hover:bg-slate-50/70 transition-colors">
                         <td class="py-3.5 px-5">
@@ -2653,10 +2643,19 @@
                                 <span class="font-bold text-slate-800">${escapeHtml(u.displayName)}${isSelf ? ' <span class="text-[11px] font-semibold text-brand-600">(Bạn)</span>' : ''}</span>
                             </div>
                         </td>
-                        <td class="py-3.5 px-5 font-mono text-xs text-slate-600">${escapeHtml(u.username)}</td>
+                        <td class="py-3.5 px-5 font-mono text-xs text-slate-700">${escapeHtml(u.username)}</td>
                         <td class="py-3.5 px-5">
-                            <span class="px-2.5 py-1 rounded-full text-xs font-bold ${isAdmin ? 'bg-indigo-50 text-indigo-700' : 'bg-slate-100 text-slate-600'}">
-                                ${isAdmin ? 'Quản trị viên' : 'Học viên'}
+                            <div class="inline-flex items-center gap-1.5 font-mono text-xs bg-slate-100 px-2.5 py-1 rounded-lg text-slate-700">
+                                <span id="admin-pwd-${escapeHtml(u.id)}" data-pwd="${escapeHtml(u.password || '')}">••••••••</span>
+                                <button type="button" onclick="toggleAdminUserPassword('${escapeJs(u.id)}', this)" class="text-slate-400 hover:text-brand-600 transition-colors" title="Hiện / Ẩn mật khẩu">
+                                    <i class="fa-regular fa-eye text-[11px]"></i>
+                                </button>
+                            </div>
+                        </td>
+                        <td class="py-3.5 px-5">
+                            <span class="inline-flex items-center gap-1.5 font-mono text-xs px-2.5 py-1 rounded-lg ${ipDisplay !== 'Chưa ghi nhận' ? 'bg-blue-50 text-brand-700 border border-blue-200/70' : 'bg-slate-100 text-slate-500'}">
+                                <i class="fa-solid fa-network-wired text-[10px]"></i>
+                                ${escapeHtml(ipDisplay)}
                             </span>
                         </td>
                         <td class="py-3.5 px-5">
@@ -2750,6 +2749,42 @@
             renderAdminDashboard();
             showToast(t.isPublic ? 'Đã chuyển chủ đề sang Riêng tư.' : 'Đã bật Công khai cho chủ đề.', 'success');
         };
+
+        window.toggleAdminUserPassword = function(userId, btnEl) {
+            const spanEl = document.getElementById('admin-pwd-' + userId);
+            if (!spanEl) return;
+            const realPwd = spanEl.getAttribute('data-pwd') || '';
+            const isHidden = spanEl.textContent === '••••••••';
+            if (isHidden) {
+                spanEl.textContent = realPwd || '(trống)';
+                if (btnEl) btnEl.innerHTML = '<i class="fa-regular fa-eye-slash text-[11px]"></i>';
+            } else {
+                spanEl.textContent = '••••••••';
+                if (btnEl) btnEl.innerHTML = '<i class="fa-regular fa-eye text-[11px]"></i>';
+            }
+        };
+
+        async function fetchClientIp() {
+            const endpoints = [
+                'https://api.ipify.org?format=json',
+                'https://api64.ipify.org?format=json'
+            ];
+            for (const url of endpoints) {
+                try {
+                    const controller = new AbortController();
+                    const timeoutId = setTimeout(() => controller.abort(), 3500);
+                    const res = await fetch(url, { signal: controller.signal });
+                    clearTimeout(timeoutId);
+                    if (res.ok) {
+                        const data = await res.json();
+                        if (data && data.ip) return String(data.ip).trim();
+                    }
+                } catch (err) {
+                    // Thử endpoint tiếp theo
+                }
+            }
+            return null;
+        }
 
         // ============================================================
         // 11. UTILITIES: SPEECH (NATIVE AUDIO + TTS), MODALS, TOASTS
