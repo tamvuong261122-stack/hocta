@@ -829,12 +829,15 @@
                 </div>
 
                 <!-- Admin Sub-tabs -->
-                <div class="flex gap-2 mb-5 border-b border-slate-200 pb-3">
+                <div class="flex flex-wrap gap-2 mb-5 border-b border-slate-200 pb-3">
                     <button id="admin-tab-users" onclick="switchAdminTab('users')" class="px-4 py-2 rounded-xl text-sm font-semibold transition-all bg-brand-600 text-white shadow-sm">
                         <i class="fa-solid fa-user-gear mr-1.5"></i> Quản lý Tài khoản
                     </button>
                     <button id="admin-tab-topics" onclick="switchAdminTab('topics')" class="px-4 py-2 rounded-xl text-sm font-semibold transition-all bg-white text-slate-600 border border-slate-200 hover:bg-slate-50">
                         <i class="fa-solid fa-folder-tree mr-1.5"></i> Quản lý Chủ đề
+                    </button>
+                    <button id="admin-tab-history" onclick="switchAdminTab('history')" class="px-4 py-2 rounded-xl text-sm font-semibold transition-all bg-white text-slate-600 border border-slate-200 hover:bg-slate-50">
+                        <i class="fa-solid fa-clock-rotate-left mr-1.5"></i> Lịch sử ôn tập
                     </button>
                 </div>
 
@@ -872,6 +875,38 @@
                                 </tr>
                             </thead>
                             <tbody id="admin-topics-tbody" class="divide-y divide-slate-100 text-sm"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Admin Review History Panel -->
+                <div id="admin-panel-history" class="hidden bg-white rounded-3xl border border-slate-200/80 shadow-sm overflow-hidden">
+                    <div class="p-4 sm:px-6 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-50/60">
+                        <div>
+                            <h3 class="text-sm font-bold text-slate-800">Nhật ký ôn tập của học viên</h3>
+                            <p class="text-xs text-slate-500">Theo dõi chi tiết các lượt ôn tập chọn nghĩa, điền từ, luyện gõ và flashcard.</p>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <select id="admin-history-user-filter" onchange="renderAdminHistory()" class="px-3 py-2 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-700 outline-none focus:border-brand-500">
+                                <option value="all">Tất cả tài khoản thường</option>
+                            </select>
+                            <button onclick="confirmClearReviewHistory()" class="px-3 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 text-xs font-semibold transition-all" title="Xóa lịch sử ôn tập">
+                                <i class="fa-solid fa-trash-can"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left border-collapse">
+                            <thead>
+                                <tr class="bg-slate-50 border-b border-slate-100 text-xs font-bold text-slate-500 uppercase">
+                                    <th class="py-3.5 px-5">Thời gian</th>
+                                    <th class="py-3.5 px-5">Tài khoản</th>
+                                    <th class="py-3.5 px-5">Chủ đề</th>
+                                    <th class="py-3.5 px-5">Hình thức ôn</th>
+                                    <th class="py-3.5 px-5">Kết quả</th>
+                                </tr>
+                            </thead>
+                            <tbody id="admin-history-tbody" class="divide-y divide-slate-100 text-sm"></tbody>
                         </table>
                     </div>
                 </div>
@@ -1039,6 +1074,7 @@
         let appUsers = [];
         let appTopics = [];
         let appProgress = {}; // { `${userId}_${topicId}`: { wordId: 'known' | 'review' } }
+        let appReviewHistory = []; // Lịch sử ôn tập của người dùng
         let currentUser = null;
         let currentView = 'my-topics';
         let previousView = 'my-topics';
@@ -1174,6 +1210,7 @@
             USERS: 'vocaflow_users_v2',
             TOPICS: 'vocaflow_topics_v2',
             PROGRESS: 'vocaflow_progress_v2',
+            HISTORY: 'vocaflow_review_history_v2',
             SESSION: 'vocaflow_session_uid_v2'
         };
 
@@ -1200,6 +1237,7 @@
             safeStorage.set(LS_KEYS.USERS, appUsers);
             safeStorage.set(LS_KEYS.TOPICS, appTopics);
             safeStorage.set(LS_KEYS.PROGRESS, appProgress);
+            safeStorage.set(LS_KEYS.HISTORY, appReviewHistory);
         }
 
         function setSaveStatus(state = 'saved') {
@@ -1233,10 +1271,12 @@
             const cachedUsers = safeStorage.get(LS_KEYS.USERS);
             const cachedTopics = safeStorage.get(LS_KEYS.TOPICS);
             const cachedProgress = safeStorage.get(LS_KEYS.PROGRESS);
+            const cachedHistory = safeStorage.get(LS_KEYS.HISTORY);
 
             appUsers = (Array.isArray(cachedUsers) && cachedUsers.length > 0) ? cachedUsers : structuredClone(SEED_USERS);
             appTopics = (Array.isArray(cachedTopics) && cachedTopics.length > 0) ? cachedTopics : structuredClone(SEED_TOPICS);
             appProgress = (cachedProgress && typeof cachedProgress === 'object') ? cachedProgress : {};
+            appReviewHistory = Array.isArray(cachedHistory) ? cachedHistory : [];
 
             // Lấy địa chỉ IP hiện tại của thiết bị (không chặn luồng khởi tạo nếu mạng chậm)
             fetchClientIp().then(ip => {
@@ -1443,6 +1483,16 @@
                         refreshCurrentView();
                     }
                 }, (err) => console.warn('Topics snapshot error:', err));
+
+                const historyCol = collection(db, 'artifacts', appId, 'public', 'data', 'review_history');
+                onSnapshot(historyCol, (snap) => {
+                    const remoteHistory = [];
+                    snap.forEach(d => remoteHistory.push(d.data()));
+                    remoteHistory.sort((a, b) => new Date(b.completedAt || 0) - new Date(a.completedAt || 0));
+                    appReviewHistory = remoteHistory;
+                    safeStorage.set(LS_KEYS.HISTORY, appReviewHistory);
+                    if (currentView === 'admin') renderAdminHistory();
+                }, (err) => console.warn('Review history snapshot error:', err));
             } catch (err) {
                 console.warn('startFirestoreListeners error:', err);
             }
@@ -1543,102 +1593,36 @@
             }
         }
 
-        window.exportBackupJson = function() {
-            if (!currentUser) return;
-            const userTopics = appTopics.filter(t => t.ownerId === currentUser.id);
-            const payload = {
-                app: 'VocaFlow',
-                version: '2.0',
-                exportedAt: new Date().toISOString(),
-                exportedBy: currentUser.username,
-                topics: userTopics,
-                progress: appProgress
+        async function recordReviewHistory(modeLabel, score, total) {
+            if (!currentUser || !currentTopicId) return;
+            const topic = appTopics.find(t => t.id === currentTopicId);
+            const acc = total > 0 ? Math.round((score / total) * 100) : 0;
+            const entry = {
+                id: 'hist_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+                userId: currentUser.id,
+                username: currentUser.username,
+                displayName: currentUser.displayName,
+                userRole: currentUser.role || 'user',
+                topicId: currentTopicId,
+                topicTitle: topic ? topic.title : 'Chủ đề đã xóa',
+                mode: modeLabel,
+                score,
+                total,
+                accuracy: acc,
+                completedAt: new Date().toISOString()
             };
-            const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            const dateStr = new Date().toISOString().slice(0, 10);
-            a.href = url;
-            a.download = `VocaFlow_Backup_${currentUser.username}_${dateStr}.json`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-            showToast(`Đã xuất sao lưu ${userTopics.length} chủ đề ra tệp .json!`, 'success');
-        };
 
-        window.triggerImportBackup = function() {
-            const input = document.getElementById('import-json-input');
-            if (input) {
-                input.value = '';
-                input.click();
-            }
-        };
+            appReviewHistory.unshift(entry);
+            if (appReviewHistory.length > 300) appReviewHistory.length = 300;
+            safeStorage.set(LS_KEYS.HISTORY, appReviewHistory);
 
-        window.handleImportBackupJson = async function(event) {
-            const file = event?.target?.files?.[0];
-            if (!file) return;
-            if (!currentUser) {
-                showToast('Vui lòng đăng nhập trước khi khôi phục dữ liệu!', 'error');
-                return;
-            }
-
-            try {
-                const text = await file.text();
-                const data = JSON.parse(text);
-                const importedTopics = Array.isArray(data.topics) ? data.topics : (Array.isArray(data) ? data : null);
-
-                if (!importedTopics) {
-                    showToast('Tệp .json không đúng định dạng sao lưu của VocaFlow!', 'error');
-                    return;
+            if (useFirebase && db) {
+                try {
+                    const ref = doc(db, 'artifacts', appId, 'public', 'data', 'review_history', entry.id);
+                    await setDoc(ref, entry);
+                } catch (err) {
+                    console.warn('recordReviewHistory Firestore error:', err);
                 }
-
-                let addedCount = 0;
-                for (const rawTopic of importedTopics) {
-                    if (!rawTopic.title) continue;
-                    const restoredTopic = {
-                        id: 'topic_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
-                        title: rawTopic.title,
-                        description: rawTopic.description || '',
-                        ownerId: currentUser.id,
-                        ownerName: currentUser.displayName,
-                        isPublic: !!rawTopic.isPublic,
-                        shareCode: 'VOC-' + Math.random().toString(36).substring(2, 6).toUpperCase(),
-                        createdAt: rawTopic.createdAt || new Date().toISOString(),
-                        words: Array.isArray(rawTopic.words) ? rawTopic.words.map(w => ({
-                            id: 'w_' + Math.random().toString(36).slice(2, 8),
-                            en: w.en || '',
-                            vi: w.vi || '',
-                            phonetic: w.phonetic || '',
-                            audio: w.audio || ''
-                        })).filter(w => w.en && w.vi) : []
-                    };
-                    await saveTopicDoc(restoredTopic);
-                    addedCount++;
-                }
-
-                if (data.progress && typeof data.progress === 'object') {
-                    appProgress = { ...appProgress, ...data.progress };
-                    safeStorage.set(LS_KEYS.PROGRESS, appProgress);
-                }
-
-                refreshCurrentView();
-                showToast(`Đã khôi phục thành công ${addedCount} chủ đề từ tệp sao lưu!`, 'success');
-            } catch (err) {
-                console.error('Import JSON error:', err);
-                showToast('Không thể đọc tệp .json. Vui lòng kiểm tra lại tệp!', 'error');
-            }
-        };
-
-        // ============================================================
-        // 3. AUTHENTICATION UI & HANDLERS
-        // ============================================================
-        function showSessionAlertBanner(message) {
-            const banner = document.getElementById('session-alert-banner');
-            const textEl = document.getElementById('session-alert-text');
-            if (banner && textEl) {
-                textEl.textContent = message || 'Tài khoản của bạn đã được đăng nhập ở nơi khác!';
-                banner.classList.remove('hidden');
             }
         }
 
@@ -2682,6 +2666,10 @@
             const word = fcState.words[fcState.filteredIndices[fcState.currentIndex]];
             fcState.statuses[word.id] = status;
             await saveProgressDoc(currentTopicId, fcState.statuses);
+            const knownCount = Object.values(fcState.statuses).filter(s => s === 'known').length;
+            if (status === 'known' && knownCount === fcState.words.length) {
+                recordReviewHistory('Flashcard (Thuộc hết)', knownCount, fcState.words.length);
+            }
             if (fcState.currentIndex < fcState.filteredIndices.length - 1) {
                 fcState.currentIndex++;
                 fcState.isFlipped = false;
@@ -2896,6 +2884,8 @@
             const total = tpState.queue.length;
             const correct = tpState.score;
             const acc = Math.round((correct / total) * 100);
+            const modeText = tpState.mode === 'vi-to-en' ? 'Luyện gõ (Việt → Anh)' : 'Luyện gõ (Anh → Việt)';
+            recordReviewHistory(modeText, correct, total);
 
             document.getElementById('tp-sum-total').textContent = total;
             document.getElementById('tp-sum-correct').textContent = correct;
@@ -3126,6 +3116,7 @@
 
         function showMatchingSummary() {
             const total = mtState.words.length;
+            recordReviewHistory('Ôn tập chọn nghĩa', mtState.score, total);
             document.getElementById('mt-summary-box').classList.remove('hidden');
             document.getElementById('mt-summary-detail').textContent = `Bạn đã nối đúng ${mtState.score}/${total} từ tiếng Anh với nghĩa tiếng Việt.`;
         }
@@ -3296,6 +3287,7 @@
                 document.getElementById('fw-card-container').classList.add('hidden');
                 document.getElementById('fw-summary-container').classList.remove('hidden');
                 const total = fwState.queue.length;
+                recordReviewHistory('Điền từ', fwState.score, total);
                 document.getElementById('fw-summary-msg').textContent = `Bạn đã điền đúng ${fwState.score}/${total} từ tiếng Anh!`;
             }
         };
@@ -3306,23 +3298,23 @@
         window.switchAdminTab = function(tab) {
             const usersPanel = document.getElementById('admin-panel-users');
             const topicsPanel = document.getElementById('admin-panel-topics');
+            const historyPanel = document.getElementById('admin-panel-history');
             const usersTab = document.getElementById('admin-tab-users');
             const topicsTab = document.getElementById('admin-tab-topics');
+            const historyTab = document.getElementById('admin-tab-history');
 
             const activeCls = 'px-4 py-2 rounded-xl text-sm font-semibold transition-all bg-brand-600 text-white shadow-sm';
             const inactiveCls = 'px-4 py-2 rounded-xl text-sm font-semibold transition-all bg-white text-slate-600 border border-slate-200 hover:bg-slate-50';
 
-            if (tab === 'topics') {
-                usersPanel.classList.add('hidden');
-                topicsPanel.classList.remove('hidden');
-                usersTab.className = inactiveCls;
-                topicsTab.className = activeCls;
-            } else {
-                topicsPanel.classList.add('hidden');
-                usersPanel.classList.remove('hidden');
-                usersTab.className = activeCls;
-                topicsTab.className = inactiveCls;
-            }
+            usersPanel.classList.toggle('hidden', tab !== 'users');
+            topicsPanel.classList.toggle('hidden', tab !== 'topics');
+            historyPanel.classList.toggle('hidden', tab !== 'history');
+
+            usersTab.className = tab === 'users' ? activeCls : inactiveCls;
+            topicsTab.className = tab === 'topics' ? activeCls : inactiveCls;
+            historyTab.className = tab === 'history' ? activeCls : inactiveCls;
+
+            if (tab === 'history') renderAdminHistory();
         };
 
         function renderAdminDashboard() {
@@ -3330,8 +3322,7 @@
             document.getElementById('admin-stat-users').textContent = appUsers.length;
             document.getElementById('admin-stat-topics').textContent = appTopics.length;
             document.getElementById('admin-stat-words').textContent = totalWords;
-
-            // Render Users Table
+            renderAdminHistory();
             const usersTbody = document.getElementById('admin-users-tbody');
             usersTbody.innerHTML = appUsers.map(u => {
                 const isSelf = currentUser && u.id === currentUser.id;
@@ -3414,6 +3405,92 @@
                 </tr>
             `).join('');
         }
+
+        window.renderAdminHistory = function() {
+            const tbody = document.getElementById('admin-history-tbody');
+            const filterSelect = document.getElementById('admin-history-user-filter');
+            if (!tbody || !filterSelect) return;
+
+            const currentFilter = filterSelect.value || 'all';
+            const regularUsers = appUsers.filter(u => u.role !== 'admin');
+            filterSelect.innerHTML = `
+                <option value="all">Tất cả tài khoản thường (${regularUsers.length})</option>
+                ${regularUsers.map(u => `<option value="${escapeHtml(u.id)}">${escapeHtml(u.displayName)} (@${escapeHtml(u.username)})</option>`).join('')}
+            `;
+            if ([...filterSelect.options].some(o => o.value === currentFilter)) {
+                filterSelect.value = currentFilter;
+            }
+
+            const selectedUid = filterSelect.value;
+            const filtered = appReviewHistory.filter(item => {
+                if (item.userRole === 'admin') return false;
+                if (selectedUid !== 'all' && item.userId !== selectedUid) return false;
+                return true;
+            });
+
+            if (filtered.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="5" class="py-10 px-5 text-center text-sm text-slate-400">
+                            Chưa có lượt ôn tập nào của tài khoản thường được ghi nhận.
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            tbody.innerHTML = filtered.map(item => {
+                const timeStr = item.completedAt ? new Date(item.completedAt).toLocaleString('vi-VN') : '';
+                const acc = typeof item.accuracy === 'number' ? item.accuracy : (item.total > 0 ? Math.round((item.score / item.total) * 100) : 0);
+                const badgeCls = acc >= 80
+                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                    : (acc >= 50 ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-rose-50 text-rose-700 border-rose-200');
+
+                return `
+                    <tr class="hover:bg-slate-50/70 transition-colors">
+                        <td class="py-3.5 px-5 text-xs font-mono text-slate-500 whitespace-nowrap">${escapeHtml(timeStr)}</td>
+                        <td class="py-3.5 px-5">
+                            <div class="font-bold text-slate-800 text-xs sm:text-sm">${escapeHtml(item.displayName || item.username)}</div>
+                            <div class="text-[11px] font-mono text-slate-400">@${escapeHtml(item.username || '')}</div>
+                        </td>
+                        <td class="py-3.5 px-5 font-semibold text-slate-700">${escapeHtml(item.topicTitle || '')}</td>
+                        <td class="py-3.5 px-5">
+                            <span class="px-2.5 py-1 rounded-lg bg-violet-50 text-violet-700 text-xs font-semibold">${escapeHtml(item.mode || 'Ôn tập')}</span>
+                        </td>
+                        <td class="py-3.5 px-5">
+                            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-bold ${badgeCls}">
+                                ${item.score}/${item.total} (${acc}%)
+                            </span>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        };
+
+        window.confirmClearReviewHistory = function() {
+            if (appReviewHistory.length === 0) {
+                showToast('Lịch sử ôn tập hiện đang trống.', 'info');
+                return;
+            }
+            openConfirmModal(
+                'Xóa lịch sử ôn tập?',
+                'Bạn có chắc chắn muốn xóa toàn bộ nhật ký ôn tập của học viên?',
+                async () => {
+                    const toDelete = [...appReviewHistory];
+                    appReviewHistory = [];
+                    safeStorage.set(LS_KEYS.HISTORY, appReviewHistory);
+                    renderAdminHistory();
+                    if (useFirebase && db) {
+                        for (const item of toDelete) {
+                            try {
+                                await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'review_history', item.id));
+                            } catch (e) { /* ignore */ }
+                        }
+                    }
+                    showToast('Đã xóa toàn bộ lịch sử ôn tập.', 'success');
+                }
+            );
+        };
 
         window.adminToggleRole = async function(userId) {
             const u = appUsers.find(x => x.id === userId);
