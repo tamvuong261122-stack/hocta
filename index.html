@@ -1453,12 +1453,17 @@
 
         window.handleRegister = async function(e) {
             e.preventDefault();
-            const displayName = document.getElementById('reg-displayname').value.trim();
+            const displayName = document.getElementById('reg-displayname').value.trim().replace(/\s+/g, ' ');
             const username = document.getElementById('reg-username').value.trim().toLowerCase();
             const password = document.getElementById('reg-password').value;
 
-            if (appUsers.some(u => u.username.toLowerCase() === username)) {
-                showToast('Tên đăng nhập này đã tồn tại!', 'error');
+            if (appUsers.some(u => (u.username || '').trim().toLowerCase() === username)) {
+                showToast('Tên tài khoản này đã được sử dụng, vui lòng chọn tên khác!', 'error');
+                return;
+            }
+
+            if (appUsers.some(u => (u.displayName || '').trim().replace(/\s+/g, ' ').toLowerCase() === displayName.toLowerCase())) {
+                showToast('Tên hiển thị này đã tồn tại, vui lòng chọn tên hiển thị khác!', 'error');
                 return;
             }
 
