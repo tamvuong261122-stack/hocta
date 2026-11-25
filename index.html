@@ -1278,7 +1278,7 @@
             appProgress = (cachedProgress && typeof cachedProgress === 'object') ? cachedProgress : {};
             appReviewHistory = Array.isArray(cachedHistory) ? cachedHistory : [];
 
-            // Lấy địa chỉ IP hiện tại của thiết bị (không chặn luồng khởi tạo nếu mạng chậm)
+            // Lấy địa chỉ IP hiện tại của thiết bị
             fetchClientIp().then(ip => {
                 if (ip) {
                     currentClientIp = ip;
@@ -1289,7 +1289,7 @@
                 }
             });
 
-            // Khởi tạo Firebase nếu có cấu hình hợp lệ (sử dụng dự án vocaflow-app-47bb4 của người dùng)
+            // Cấu hình Firebase Cloud (vocaflow-app-47bb4)
             const firebaseConfig = {
                 apiKey: "AIzaSyDoxLXzY0OWZDe1IETkwnTJBpCqzQxT5Lg",
                 authDomain: "vocaflow-app-47bb4.firebaseapp.com",
@@ -1346,7 +1346,6 @@
             if (savedUid) {
                 const foundUser = appUsers.find(u => u.id === savedUid && !u.locked);
                 if (foundUser) {
-                    // Nếu tài khoản đã có phiên đăng nhập mới hơn thì không tự khôi phục phiên cũ
                     if (savedToken && foundUser.activeSessionId && foundUser.activeSessionId !== savedToken) {
                         safeStorage.remove(LS_KEYS.SESSION);
                     } else {
@@ -1458,8 +1457,7 @@
                             const updatedSelf = appUsers.find(u => u.id === currentUser.id);
                             if (updatedSelf) {
                                 if (updatedSelf.locked) {
-                                    handleLogout(true);
-                                    showToast('Tài khoản của bạn đã bị khóa bởi quản trị viên.', 'error');
+                                    handleLogout(true, 'Tài khoản của bạn đã bị khóa bởi quản trị viên.');
                                     return;
                                 }
                                 if (enforceSingleActiveSession(updatedSelf)) {
@@ -1626,6 +1624,17 @@
             }
         }
 
+        // ============================================================
+        // 3. AUTHENTICATION & NAVIGATION
+        // ============================================================
+        function showSessionAlertBanner(message) {
+            const banner = document.getElementById('session-alert-banner');
+            const textEl = document.getElementById('session-alert-text');
+            if (!banner || !textEl) return;
+            textEl.textContent = message || 'Tài khoản của bạn đã được đăng nhập ở nơi khác!';
+            banner.classList.remove('hidden');
+        }
+
         window.hideSessionAlertBanner = function() {
             const banner = document.getElementById('session-alert-banner');
             if (banner) banner.classList.add('hidden');
@@ -1691,7 +1700,6 @@
             broadcastSessionUpdate(currentUser.id, currentSessionToken);
             subscribeToCurrentUserSession();
 
-            // Nếu chưa kịp lấy IP lúc mở trang, thử lấy lại ngay khi đăng nhập
             if (!currentClientIp) {
                 fetchClientIp().then(ip => {
                     if (ip && currentUser && currentUser.id === found.id) {
@@ -2731,7 +2739,6 @@
             window.currentTopicId = topicId;
             document.getElementById('tp-topic-title').textContent = topic.title;
 
-            // Shuffle queue
             const shuffled = [...sourceWords].sort(() => Math.random() - 0.5);
             tpState = {
                 mode: tpState.mode || 'vi-to-en',
@@ -2830,7 +2837,6 @@
             const word = tpState.queue[tpState.currentIndex];
             const expectedRaw = tpState.mode === 'vi-to-en' ? word.en : word.vi;
 
-            // Accept exact match OR any comma/slash separated valid meaning
             const validVariants = expectedRaw.split(/[,;/]/).map(s => normalizeAnswer(s)).filter(Boolean);
             validVariants.push(normalizeAnswer(expectedRaw));
 
@@ -3323,6 +3329,7 @@
             document.getElementById('admin-stat-topics').textContent = appTopics.length;
             document.getElementById('admin-stat-words').textContent = totalWords;
             renderAdminHistory();
+
             const usersTbody = document.getElementById('admin-users-tbody');
             usersTbody.innerHTML = appUsers.map(u => {
                 const isSelf = currentUser && u.id === currentUser.id;
@@ -3351,6 +3358,11 @@
                             <span class="inline-flex items-center gap-1.5 font-mono text-xs px-2.5 py-1 rounded-lg ${ipDisplay !== 'Chưa ghi nhận' ? 'bg-blue-50 text-brand-700 border border-blue-200/70' : 'bg-slate-100 text-slate-500'}">
                                 <i class="fa-solid fa-network-wired text-[10px]"></i>
                                 ${escapeHtml(ipDisplay)}
+                            </span>
+                        </td>
+                        <td class="py-3.5 px-5">
+                            <span class="px-2.5 py-1 rounded-full text-xs font-bold ${isAdmin ? 'bg-indigo-50 text-indigo-700' : 'bg-slate-100 text-slate-700'}">
+                                ${isAdmin ? 'Admin' : 'Học viên'}
                             </span>
                         </td>
                         <td class="py-3.5 px-5">
@@ -3568,8 +3580,78 @@
         }
 
         // ============================================================
-        // 11. UTILITIES: SPEECH (NATIVE AUDIO + TTS), MODALS, TOASTS
+        // 11. BACKUP / RESTORE JSON & UTILITIES
         // ============================================================
+        window.exportBackupJson = function() {
+            if (!currentUser) return;
+            const myTopics = appTopics.filter(t => t.ownerId === currentUser.id);
+            const payload = {
+                version: '2.0',
+                exportedAt: new Date().toISOString(),
+                user: {
+                    username: currentUser.username,
+                    displayName: currentUser.displayName
+                },
+                topics: myTopics,
+                progress: appProgress
+            };
+
+            const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            const dateTag = new Date().toISOString().slice(0, 10);
+            a.href = url;
+            a.download = `VocaFlow_Backup_${currentUser.username}_${dateTag}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            showToast(`Đã xuất sao lưu ${myTopics.length} chủ đề ra tệp .json!`, 'success');
+        };
+
+        window.triggerImportBackup = function() {
+            const input = document.getElementById('import-json-input');
+            if (input) {
+                input.value = '';
+                input.click();
+            }
+        };
+
+        window.handleImportBackupJson = function(event) {
+            const file = event.target?.files?.[0];
+            if (!file || !currentUser) return;
+
+            const reader = new FileReader();
+            reader.onload = async (e) => {
+                try {
+                    const parsed = JSON.parse(e.target.result);
+                    const importedTopics = Array.isArray(parsed?.topics) ? parsed.topics : [];
+                    if (importedTopics.length === 0) {
+                        showToast('Tệp sao lưu không có chủ đề hợp lệ nào!', 'error');
+                        return;
+                    }
+
+                    for (const t of importedTopics) {
+                        const restored = {
+                            ...t,
+                            id: 'topic_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
+                            ownerId: currentUser.id,
+                            ownerName: currentUser.displayName,
+                            shareCode: 'VOC-' + Math.random().toString(36).substring(2, 6).toUpperCase(),
+                            words: Array.isArray(t.words) ? t.words : []
+                        };
+                        await saveTopicDoc(restored);
+                    }
+
+                    refreshCurrentView();
+                    showToast(`Đã khôi phục thành công ${importedTopics.length} chủ đề từ tệp sao lưu!`, 'success');
+                } catch (err) {
+                    showToast('Tệp JSON không hợp lệ hoặc bị hỏng!', 'error');
+                }
+            };
+            reader.readAsText(file);
+        };
+
         window.speakWord = function(wordObj) {
             if (!wordObj) return;
             if (wordObj.audio) {
