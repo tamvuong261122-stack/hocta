@@ -933,6 +933,7 @@
                                     <th class="py-3.5 px-5">Chủ đề</th>
                                     <th class="py-3.5 px-5">Hình thức ôn</th>
                                     <th class="py-3.5 px-5">Kết quả</th>
+                                    <th class="py-3.5 px-5">Từ làm sai</th>
                                 </tr>
                             </thead>
                             <tbody id="admin-history-tbody" class="divide-y divide-slate-100 text-sm"></tbody>
@@ -1151,6 +1152,7 @@
             started: false,
             activeIndex: -1,
             matchedIds: {},
+            failedIds: {},
             wrongIds: {},
             score: 0,
             lockedTurn: false
@@ -1162,6 +1164,7 @@
             started: false,
             currentIndex: 0,
             score: 0,
+            wrongWords: [],
             answered: false,
             revealedCount: 0
         };
@@ -1620,10 +1623,16 @@
             }
         }
 
-        async function recordReviewHistory(modeLabel, score, total) {
+        async function recordReviewHistory(modeLabel, score, total, wrongWords = []) {
             if (!currentUser || !currentTopicId) return;
             const topic = appTopics.find(t => t.id === currentTopicId);
             const acc = total > 0 ? Math.round((score / total) * 100) : 0;
+            const cleanWrongWords = Array.isArray(wrongWords)
+                ? wrongWords.map(w => ({
+                    en: String(w?.en || '').trim(),
+                    vi: String(w?.vi || '').trim()
+                })).filter(w => w.en || w.vi)
+                : [];
             const entry = {
                 id: 'hist_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
                 userId: currentUser.id,
@@ -1636,6 +1645,7 @@
                 score,
                 total,
                 accuracy: acc,
+                wrongWords: cleanWrongWords,
                 completedAt: new Date().toISOString()
             };
 
@@ -2943,7 +2953,7 @@
             const correct = tpState.score;
             const acc = Math.round((correct / total) * 100);
             const modeText = tpState.mode === 'vi-to-en' ? 'Luyện gõ (Việt → Anh)' : 'Luyện gõ (Anh → Việt)';
-            recordReviewHistory(modeText, correct, total);
+            recordReviewHistory(modeText, correct, total, tpState.wrongWords);
 
             document.getElementById('tp-sum-total').textContent = total;
             document.getElementById('tp-sum-correct').textContent = correct;
@@ -3010,6 +3020,7 @@
                 started: false,
                 activeIndex: -1,
                 matchedIds: {},
+                failedIds: {},
                 wrongIds: {},
                 score: 0,
                 lockedTurn: false
@@ -3031,6 +3042,7 @@
             mtState.viChoices = shuffledVi;
             mtState.activeIndex = 0;
             mtState.matchedIds = {};
+            mtState.failedIds = {};
             mtState.wrongIds = {};
             mtState.score = 0;
             mtState.lockedTurn = false;
@@ -3048,7 +3060,7 @@
             for (let offset = 0; offset < total; offset++) {
                 const candidate = (fromIdx + offset) % total;
                 const w = mtState.words[mtState.enOrder[candidate]];
-                if (w && !mtState.matchedIds[w.id]) return candidate;
+                if (w && !mtState.matchedIds[w.id] && !mtState.failedIds[w.id]) return candidate;
             }
             return -1;
         }
@@ -3056,22 +3068,24 @@
         function renderMatchingBoard() {
             const total = mtState.words.length;
             const matchedCount = Object.keys(mtState.matchedIds).length;
+            const failedCount = Object.keys(mtState.failedIds).length;
+            const answeredCount = matchedCount + failedCount;
 
             document.getElementById('mt-total-num').textContent = total;
             document.getElementById('mt-score-num').textContent = mtState.score;
-            document.getElementById('mt-progress-bar').style.width = `${Math.round((matchedCount / total) * 100)}%`;
+            document.getElementById('mt-progress-bar').style.width = `${Math.round((answeredCount / total) * 100)}%`;
 
             if (!mtState.started) {
                 document.getElementById('mt-progress-text').textContent = 'Chưa bắt đầu';
                 document.getElementById('mt-active-hint').textContent = 'Bấm "Bắt đầu" để làm sáng từ tiếng Anh cần chọn nghĩa';
                 document.getElementById('mt-status-msg').textContent = 'Danh sách nghĩa ở phía dưới';
-            } else if (matchedCount >= total) {
+            } else if (answeredCount >= total && !mtState.lockedTurn) {
                 document.getElementById('mt-progress-text').textContent = `Hoàn thành (${total}/${total})`;
-                document.getElementById('mt-active-hint').textContent = 'Tất cả từ tiếng Anh đã được nối nghĩa!';
-                document.getElementById('mt-status-msg').textContent = 'Tuyệt vời!';
-            } else {
+                document.getElementById('mt-active-hint').textContent = 'Đã hoàn thành tất cả các từ tiếng Anh!';
+                document.getElementById('mt-status-msg').textContent = `Đúng ${matchedCount}/${total} từ`;
+            } else if (!mtState.lockedTurn) {
                 const activeWord = mtState.words[mtState.enOrder[mtState.activeIndex]];
-                document.getElementById('mt-progress-text').textContent = `Đã nối ${matchedCount}/${total}`;
+                document.getElementById('mt-progress-text').textContent = `Đã làm ${answeredCount}/${total}`;
                 document.getElementById('mt-active-hint').innerHTML = activeWord
                     ? `Đang sáng từ: <b class="text-violet-700">${escapeHtml(activeWord.en)}</b>`
                     : '';
@@ -3083,11 +3097,14 @@
             enContainer.innerHTML = mtState.enOrder.map((wordIdx, posIdx) => {
                 const w = mtState.words[wordIdx];
                 const isMatched = !!mtState.matchedIds[w.id];
-                const isActive = mtState.started && !isMatched && posIdx === mtState.activeIndex;
+                const isFailed = !!mtState.failedIds[w.id];
+                const isActive = mtState.started && !isMatched && !isFailed && posIdx === mtState.activeIndex;
 
                 let cls = 'px-4 py-2.5 rounded-2xl border text-sm font-bold transition-all flex items-center gap-2 ';
                 if (isMatched) {
                     cls += 'bg-emerald-50 border-emerald-200 text-emerald-700 opacity-75';
+                } else if (isFailed) {
+                    cls += 'bg-rose-50 border-rose-200 text-rose-700 opacity-80';
                 } else if (isActive) {
                     cls += 'bg-violet-600 border-violet-600 text-white shadow-lg shadow-violet-600/30 ring-4 ring-violet-200 scale-[1.03]';
                 } else {
@@ -3098,6 +3115,7 @@
                     <button type="button" onclick="selectEnWordAt(${posIdx})" class="${cls}">
                         <span>${escapeHtml(w.en)}</span>
                         ${isMatched ? '<i class="fa-solid fa-check text-xs text-emerald-600"></i>' : ''}
+                        ${isFailed ? '<i class="fa-solid fa-xmark text-xs text-rose-600"></i>' : ''}
                     </button>
                 `;
             }).join('');
@@ -3132,7 +3150,7 @@
         window.selectEnWordAt = function(posIdx) {
             if (!mtState.started || mtState.lockedTurn) return;
             const w = mtState.words[mtState.enOrder[posIdx]];
-            if (!w || mtState.matchedIds[w.id]) return;
+            if (!w || mtState.matchedIds[w.id] || mtState.failedIds[w.id]) return;
             mtState.activeIndex = posIdx;
             mtState.wrongIds = {};
             renderMatchingBoard();
@@ -3142,7 +3160,7 @@
         window.chooseViMeaning = function(chosenWordId) {
             if (!mtState.started || mtState.lockedTurn) return;
             const activeWord = mtState.words[mtState.enOrder[mtState.activeIndex]];
-            if (!activeWord || mtState.matchedIds[activeWord.id]) return;
+            if (!activeWord || mtState.matchedIds[activeWord.id] || mtState.failedIds[activeWord.id]) return;
 
             if (chosenWordId === activeWord.id) {
                 mtState.matchedIds[activeWord.id] = true;
@@ -3160,23 +3178,37 @@
                     renderMatchingBoard();
                 }
             } else {
+                mtState.failedIds[activeWord.id] = true;
                 mtState.wrongIds = { [chosenWordId]: true };
                 mtState.lockedTurn = true;
-                document.getElementById('mt-status-msg').innerHTML = `<span class="text-rose-600">Chưa đúng nghĩa của "${escapeHtml(activeWord.en)}" — thử lại nhé!</span>`;
+                document.getElementById('mt-status-msg').innerHTML = `<span class="text-rose-600">Sai rồi! Nghĩa của "${escapeHtml(activeWord.en)}" là "<b>${escapeHtml(activeWord.vi)}</b>" — đang chuyển sang từ mới...</span>`;
                 renderMatchingBoard();
+
+                const currentPos = mtState.activeIndex;
                 setTimeout(() => {
                     mtState.wrongIds = {};
                     mtState.lockedTurn = false;
-                    renderMatchingBoard();
-                }, 750);
+                    const nextIdx = findNextUnmatchedEnIndex(currentPos + 1);
+                    if (nextIdx === -1) {
+                        mtState.activeIndex = -1;
+                        renderMatchingBoard();
+                        showMatchingSummary();
+                    } else {
+                        mtState.activeIndex = nextIdx;
+                        renderMatchingBoard();
+                        const nextWord = mtState.words[mtState.enOrder[nextIdx]];
+                        if (nextWord) speakWord(nextWord);
+                    }
+                }, 900);
             }
         };
 
         function showMatchingSummary() {
             const total = mtState.words.length;
-            recordReviewHistory('Ôn tập chọn nghĩa', mtState.score, total);
+            const failedWords = mtState.words.filter(w => mtState.failedIds[w.id]);
+            recordReviewHistory('Ôn tập chọn nghĩa', mtState.score, total, failedWords);
             document.getElementById('mt-summary-box').classList.remove('hidden');
-            document.getElementById('mt-summary-detail').textContent = `Bạn đã nối đúng ${mtState.score}/${total} từ tiếng Anh với nghĩa tiếng Việt.`;
+            document.getElementById('mt-summary-detail').textContent = `Bạn đã chọn đúng ${mtState.score}/${total} từ tiếng Anh với nghĩa tiếng Việt.`;
         }
 
         // ============================================================
@@ -3197,6 +3229,7 @@
                 started: false,
                 currentIndex: 0,
                 score: 0,
+                wrongWords: [],
                 answered: false,
                 revealedCount: 0
             };
@@ -3218,6 +3251,7 @@
                 started: true,
                 currentIndex: 0,
                 score: 0,
+                wrongWords: [],
                 answered: false,
                 revealedCount: 0
             };
@@ -3321,6 +3355,7 @@
                 fb.innerHTML = `<i class="fa-solid fa-circle-check mr-2"></i>Chính xác! Từ tiếng Anh là: <b>${escapeHtml(word.en)}</b> ${word.phonetic ? `<span class="font-mono text-xs ml-1">${escapeHtml(word.phonetic)}</span>` : ''}`;
                 speakWord(word);
             } else {
+                fwState.wrongWords.push(word);
                 input.classList.add('border-rose-500', 'bg-rose-50/50', 'text-rose-800');
                 fb.className = 'p-4 rounded-2xl text-sm font-medium bg-rose-50 text-rose-700 border border-rose-200';
                 fb.innerHTML = `<div class="font-bold"><i class="fa-solid fa-circle-xmark mr-1.5"></i>Chưa đúng!</div><div class="mt-1">Đáp án đúng: <b class="text-slate-900">${escapeHtml(word.en)}</b> ${word.phonetic ? `<span class="font-mono text-xs text-slate-500">(${escapeHtml(word.phonetic)})</span>` : ''}</div>`;
@@ -3345,7 +3380,7 @@
                 document.getElementById('fw-card-container').classList.add('hidden');
                 document.getElementById('fw-summary-container').classList.remove('hidden');
                 const total = fwState.queue.length;
-                recordReviewHistory('Điền từ', fwState.score, total);
+                recordReviewHistory('Điền từ', fwState.score, total, fwState.wrongWords);
                 document.getElementById('fw-summary-msg').textContent = `Bạn đã điền đúng ${fwState.score}/${total} từ tiếng Anh!`;
             }
         };
@@ -3818,7 +3853,7 @@
                 "rows": [
                     {
                         "rule": "Đếm được — Số ít (1 cái)",
-                        "detail": "Dùng a/an (dùng \"an\" Ở đầu từ có nguyên âm u,e,o,a,i hoặc h câm; lưu ý: a university vì đọc /juː/)",
+                        "detail": "Dùng a/an (dùng \"an\" Ở đầu từ là nguyên âm u,e,o,a,i hoặc h câm; lưu ý: a university vì đọc /juː/)",
                         "example": "a bus, an applicant, an hour, a university",
                         "speak": "a bus, an applicant, an hour, a university"
                     },
@@ -4149,7 +4184,7 @@
                     },
                     {
                         "rule": "3. Động từ V-ing",
-                        "detail": "Enjoy, Love, Like, Finish, Suggest (thêm -ing bỏ -e câm cuối từ trước khi thêm -ing, VD: make → making)",
+                        "detail": "Enjoy, Love, Like, Finish, Suggest (thêm -ing, bỏ -e câm cuối từ trước khi thêm -ing, VD: make → making)",
                         "example": "I enjoy sleeping • Tom finishes doing • He suggests buying",
                         "speak": "I enjoy sleeping, Tom finishes doing, He suggests buying"
                     }
@@ -4863,7 +4898,7 @@
             if (filtered.length === 0) {
                 tbody.innerHTML = `
                     <tr>
-                        <td colspan="5" class="py-10 px-5 text-center text-sm text-slate-400">
+                        <td colspan="6" class="py-10 px-5 text-center text-sm text-slate-400">
                             Chưa có lượt ôn tập nào của tài khoản thường được ghi nhận.
                         </td>
                     </tr>
@@ -4877,6 +4912,24 @@
                 const badgeCls = acc >= 80
                     ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                     : (acc >= 50 ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-rose-50 text-rose-700 border-rose-200');
+
+                const wrongList = Array.isArray(item.wrongWords) ? item.wrongWords : null;
+                let wrongHtml = '';
+                if (wrongList && wrongList.length > 0) {
+                    wrongHtml = `
+                        <div class="flex flex-wrap gap-1.5 max-w-xs">
+                            ${wrongList.map(w => `
+                                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-rose-50 border border-rose-200/80 text-rose-700 text-xs" title="${escapeHtml(w.vi || '')}">
+                                    <b class="font-bold">${escapeHtml(w.en)}</b>${w.vi ? `<span class="text-[11px] text-rose-500">(${escapeHtml(w.vi)})</span>` : ''}
+                                </span>
+                            `).join('')}
+                        </div>
+                    `;
+                } else if (item.score >= item.total) {
+                    wrongHtml = '<span class="inline-flex items-center gap-1 text-xs font-semibold text-emerald-600"><i class="fa-solid fa-check"></i>Không sai từ nào</span>';
+                } else {
+                    wrongHtml = '<span class="text-xs text-slate-400 italic">Chưa lưu chi tiết</span>';
+                }
 
                 return `
                     <tr class="hover:bg-slate-50/70 transition-colors">
@@ -4894,6 +4947,7 @@
                                 ${item.score}/${item.total} (${acc}%)
                             </span>
                         </td>
+                        <td class="py-3.5 px-5">${wrongHtml}</td>
                     </tr>
                 `;
             }).join('');
