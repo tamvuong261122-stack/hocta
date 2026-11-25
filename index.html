@@ -1,0 +1,2841 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VocaFlow - Học Tiếng Anh Thông Minh</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Font: Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        brand: {
+                            50: '#eff6ff',
+                            100: '#dbeafe',
+                            200: '#bfdbfe',
+                            300: '#93c5fd',
+                            400: '#60a5fa',
+                            500: '#3b82f6',
+                            600: '#2563eb',
+                            700: '#1d4ed8',
+                            800: '#1e40af',
+                            900: '#1e3a8a',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f8fafc;
+            color: #0f172a;
+            overflow-x: hidden;
+        }
+
+        /* 3D Flashcard Flip Styles */
+        .perspective-1000 {
+            perspective: 1200px;
+        }
+        .flip-card-inner {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            transition: transform 0.6s cubic-bezier(0.4, 0.2, 0.2, 1);
+            transform-style: preserve-3d;
+            will-change: transform;
+        }
+        .flip-card-inner.is-flipped {
+            transform: rotateY(180deg);
+        }
+        .flip-card-front, .flip-card-back {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            -webkit-backface-visibility: hidden;
+            backface-visibility: hidden;
+            border-radius: 1.5rem;
+        }
+        .flip-card-front {
+            transform: rotateY(0deg);
+        }
+        .flip-card-back {
+            transform: rotateY(180deg);
+        }
+        .flip-card-inner.is-flipped .flip-card-front {
+            pointer-events: none;
+        }
+        .flip-card-inner:not(.is-flipped) .flip-card-back {
+            pointer-events: none;
+        }
+
+        /* Smooth Fade In */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(8px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-fade-in {
+            animation: fadeIn 0.3s ease-out forwards;
+        }
+
+        /* Toast Animation */
+        @keyframes slideInRight {
+            from { opacity: 0; transform: translateX(40px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+        .toast-enter {
+            animation: slideInRight 0.25s ease-out forwards;
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f5f9;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 9999px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col bg-slate-50 text-slate-800 antialiased">
+
+    <!-- ==================== TOAST CONTAINER ==================== -->
+    <div id="toast-container" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2.5 max-w-sm w-full pointer-events-none px-4 sm:px-0"></div>
+
+    <!-- ==================== LOADING OVERLAY ==================== -->
+    <div id="loading-overlay" class="fixed inset-0 bg-white/90 backdrop-blur-sm z-50 flex flex-col items-center justify-center transition-opacity duration-300">
+        <div class="w-12 h-12 rounded-2xl bg-brand-600 flex items-center justify-center text-white shadow-lg shadow-brand-500/30 animate-bounce mb-4">
+            <i class="fa-solid fa-book-open text-xl"></i>
+        </div>
+        <p class="text-slate-600 font-medium text-sm">Đang khởi tạo dữ liệu VocaFlow...</p>
+    </div>
+
+    <!-- ==================== AUTH SCREEN ==================== -->
+    <section id="auth-screen" class="hidden min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-brand-50 via-white to-blue-100">
+        <div class="w-full max-w-md bg-white rounded-3xl shadow-xl shadow-blue-900/5 border border-slate-100 overflow-hidden animate-fade-in">
+            <!-- Header -->
+            <div class="bg-gradient-to-r from-brand-600 to-blue-500 px-8 py-7 text-white text-center">
+                <div class="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-white/20 backdrop-blur-md mb-3 shadow-inner">
+                    <i class="fa-solid fa-graduation-cap text-2xl"></i>
+                </div>
+                <h1 class="text-2xl font-extrabold tracking-tight">VocaFlow</h1>
+                <p class="text-blue-100 text-sm mt-1">Học tiếng Anh thông minh với Flashcard & Luyện gõ</p>
+            </div>
+
+            <!-- Tabs -->
+            <div class="flex border-b border-slate-100 bg-slate-50/50 p-1.5 mx-6 mt-6 rounded-xl">
+                <button id="tab-login-btn" onclick="switchAuthTab('login')" class="flex-1 py-2.5 text-sm font-semibold rounded-lg transition-all bg-white text-brand-600 shadow-sm">
+                    Đăng nhập
+                </button>
+                <button id="tab-register-btn" onclick="switchAuthTab('register')" class="flex-1 py-2.5 text-sm font-semibold rounded-lg transition-all text-slate-500 hover:text-slate-700">
+                    Đăng ký
+                </button>
+            </div>
+
+            <!-- Login Form -->
+            <form id="login-form" onsubmit="handleLogin(event)" class="p-6 pt-5 space-y-4">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5">Tên đăng nhập</label>
+                    <div class="relative">
+                        <i class="fa-solid fa-user absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm"></i>
+                        <input id="login-username" type="text" required placeholder="Nhập tên đăng nhập..."
+                            class="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none text-sm transition-all">
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5">Mật khẩu</label>
+                    <div class="relative">
+                        <i class="fa-solid fa-lock absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm"></i>
+                        <input id="login-password" type="password" required placeholder="Nhập mật khẩu..."
+                            class="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none text-sm transition-all">
+                    </div>
+                </div>
+
+                <button type="submit" class="w-full py-3 bg-brand-600 hover:bg-brand-700 text-white font-semibold rounded-xl shadow-md shadow-brand-600/25 transition-all active:scale-[0.98] flex items-center justify-center gap-2">
+                    <span>Đăng nhập ngay</span>
+                    <i class="fa-solid fa-arrow-right text-xs"></i>
+                </button>
+            </form>
+
+            <!-- Register Form -->
+            <form id="register-form" onsubmit="handleRegister(event)" class="hidden p-6 pt-5 space-y-4">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5">Tên hiển thị</label>
+                    <div class="relative">
+                        <i class="fa-solid fa-id-card absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm"></i>
+                        <input id="reg-displayname" type="text" required placeholder="VD: Nguyễn Minh Anh"
+                            class="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none text-sm transition-all">
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5">Tên đăng nhập / Email</label>
+                    <div class="relative">
+                        <i class="fa-solid fa-at absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm"></i>
+                        <input id="reg-username" type="text" required placeholder="VD: minhanh99"
+                            class="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none text-sm transition-all">
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5">Mật khẩu</label>
+                    <div class="relative">
+                        <i class="fa-solid fa-lock absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm"></i>
+                        <input id="reg-password" type="password" required minlength="4" placeholder="Tối thiểu 4 ký tự..."
+                            class="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none text-sm transition-all">
+                    </div>
+                </div>
+                <button type="submit" class="w-full py-3 bg-brand-600 hover:bg-brand-700 text-white font-semibold rounded-xl shadow-md shadow-brand-600/25 transition-all active:scale-[0.98]">
+                    Tạo tài khoản mới
+                </button>
+            </form>
+
+            <!-- Sync Badge -->
+            <div class="px-6 py-3 bg-slate-50 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
+                <span id="auth-sync-status" class="flex items-center gap-1.5">
+                    <span class="w-2 h-2 rounded-full bg-emerald-500"></span> Đang kết nối máy chủ
+                </span>
+                <span>VocaFlow v2.0</span>
+            </div>
+        </div>
+    </section>
+
+    <!-- ==================== MAIN APP SHELL ==================== -->
+    <div id="app-shell" class="hidden flex-col min-h-screen">
+        <!-- Navbar -->
+        <header class="sticky top-0 z-30 bg-white/90 backdrop-blur-md border-b border-slate-200/80 shadow-sm">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div class="flex items-center justify-between h-16">
+                    <!-- Brand -->
+                    <div class="flex items-center gap-2.5 cursor-pointer" onclick="goHome()">
+                        <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-brand-600 to-blue-500 flex items-center justify-center text-white shadow-md shadow-brand-500/25">
+                            <i class="fa-solid fa-graduation-cap text-base"></i>
+                        </div>
+                        <span class="text-lg font-extrabold bg-gradient-to-r from-brand-700 to-blue-500 bg-clip-text text-transparent">VocaFlow</span>
+                    </div>
+
+                    <!-- Desktop Nav Links -->
+                    <nav class="hidden md:flex items-center gap-1 bg-slate-100/80 p-1 rounded-xl">
+                        <button id="nav-my-topics" onclick="navigateTo('my-topics')" class="nav-btn px-4 py-2 rounded-lg text-sm font-semibold transition-all flex items-center gap-2">
+                            <i class="fa-solid fa-folder-open"></i> Chủ đề của tôi
+                        </button>
+                        <button id="nav-community" onclick="navigateTo('community')" class="nav-btn px-4 py-2 rounded-lg text-sm font-semibold transition-all flex items-center gap-2">
+                            <i class="fa-solid fa-globe"></i> Cộng đồng
+                        </button>
+                        <button id="nav-admin" onclick="navigateTo('admin')" class="hidden nav-btn px-4 py-2 rounded-lg text-sm font-semibold transition-all flex items-center gap-2">
+                            <i class="fa-solid fa-shield-halved"></i> Quản trị
+                        </button>
+                    </nav>
+
+                    <!-- User Profile & Logout -->
+                    <div class="flex items-center gap-2 sm:gap-3">
+                        <!-- Auto-save Status Indicator -->
+                        <div id="save-status-badge" class="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-emerald-50 border border-emerald-200/80 text-emerald-700 text-[11px] font-semibold transition-all" title="Trạng thái đồng bộ dữ liệu">
+                            <i class="fa-solid fa-cloud-check text-emerald-600"></i>
+                            <span>Đã lưu tự động</span>
+                        </div>
+
+                        <!-- Backup & Restore Buttons -->
+                        <div class="flex items-center gap-1">
+                            <button onclick="exportBackupJson()" title="Sao lưu dữ liệu (Xuất file .json)" class="p-2 sm:px-2.5 sm:py-1.5 rounded-xl bg-slate-100 hover:bg-brand-50 text-slate-600 hover:text-brand-700 text-xs font-semibold transition-all flex items-center gap-1.5 border border-transparent hover:border-brand-200">
+                                <i class="fa-solid fa-download"></i>
+                                <span class="hidden lg:inline">Sao lưu</span>
+                            </button>
+                            <button onclick="triggerImportBackup()" title="Khôi phục dữ liệu (Nhập file .json)" class="p-2 sm:px-2.5 sm:py-1.5 rounded-xl bg-slate-100 hover:bg-emerald-50 text-slate-600 hover:text-emerald-700 text-xs font-semibold transition-all flex items-center gap-1.5 border border-transparent hover:border-emerald-200">
+                                <i class="fa-solid fa-upload"></i>
+                                <span class="hidden lg:inline">Khôi phục</span>
+                            </button>
+                            <input type="file" id="import-json-input" accept=".json" class="hidden" onchange="handleImportBackupJson(event)">
+                        </div>
+
+                        <div class="hidden sm:flex items-center gap-2.5 bg-slate-50 border border-slate-200/80 px-3 py-1.5 rounded-xl">
+                            <div id="user-avatar" class="w-7 h-7 rounded-lg bg-brand-100 text-brand-700 font-bold text-xs flex items-center justify-center">U</div>
+                            <div class="leading-tight">
+                                <div id="user-display-name" class="text-xs font-bold text-slate-800">Người dùng</div>
+                                <div id="user-role-badge" class="text-[10px] font-semibold text-brand-600">Học viên</div>
+                            </div>
+                        </div>
+                        <button onclick="handleLogout()" title="Đăng xuất" class="p-2.5 rounded-xl text-slate-500 hover:text-rose-600 hover:bg-rose-50 transition-all border border-transparent hover:border-rose-100">
+                            <i class="fa-solid fa-right-from-bracket"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Mobile Bottom/Secondary Nav -->
+            <div class="md:hidden flex border-t border-slate-100 bg-white px-2 py-1.5 gap-1">
+                <button id="mnav-my-topics" onclick="navigateTo('my-topics')" class="mnav-btn flex-1 py-2 rounded-lg text-xs font-semibold flex flex-col items-center gap-1">
+                    <i class="fa-solid fa-folder-open text-sm"></i> Chủ đề
+                </button>
+                <button id="mnav-community" onclick="navigateTo('community')" class="mnav-btn flex-1 py-2 rounded-lg text-xs font-semibold flex flex-col items-center gap-1">
+                    <i class="fa-solid fa-globe text-sm"></i> Cộng đồng
+                </button>
+                <button id="mnav-admin" onclick="navigateTo('admin')" class="hidden mnav-btn flex-1 py-2 rounded-lg text-xs font-semibold flex flex-col items-center gap-1">
+                    <i class="fa-solid fa-shield-halved text-sm"></i> Quản trị
+                </button>
+            </div>
+        </header>
+
+        <!-- Main Content Container -->
+        <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+
+            <!-- ========== VIEW 1: MY TOPICS ========== -->
+            <section id="view-my-topics" class="app-view hidden animate-fade-in">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+                    <div>
+                        <h2 class="text-2xl font-extrabold text-slate-900">Chủ đề của tôi</h2>
+                        <p class="text-sm text-slate-500 mt-0.5">Tạo bộ từ vựng cá nhân, luyện tập và chia sẻ với mọi người.</p>
+                    </div>
+                    <button onclick="openTopicModal()" class="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold rounded-xl shadow-md shadow-brand-600/20 transition-all active:scale-[0.98]">
+                        <i class="fa-solid fa-plus"></i> Tạo chủ đề mới
+                    </button>
+                </div>
+
+                <!-- Search Bar -->
+                <div class="relative max-w-md mb-6">
+                    <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm"></i>
+                    <input id="my-topics-search" type="text" oninput="renderMyTopics()" placeholder="Tìm kiếm chủ đề của bạn..."
+                        class="w-full pl-10 pr-4 py-2.5 bg-white rounded-xl border border-slate-200 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none text-sm shadow-sm">
+                </div>
+
+                <!-- Topics Grid -->
+                <div id="my-topics-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5"></div>
+            </section>
+
+            <!-- ========== VIEW 2: COMMUNITY / SHARED ========== -->
+            <section id="view-community" class="app-view hidden animate-fade-in">
+                <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6">
+                    <div>
+                        <h2 class="text-2xl font-extrabold text-slate-900">Thư viện Cộng đồng</h2>
+                        <p class="text-sm text-slate-500 mt-0.5">Khám phá các bộ từ vựng được chia sẻ công khai hoặc mở bằng mã chia sẻ.</p>
+                    </div>
+                    <!-- Share Code Lookup -->
+                    <form onsubmit="handleOpenByShareCode(event)" class="flex items-center gap-2 bg-white p-1.5 rounded-2xl border border-slate-200 shadow-sm w-full lg:w-auto">
+                        <div class="relative flex-1 lg:w-52">
+                            <i class="fa-solid fa-key absolute left-3 top-1/2 -translate-y-1/2 text-brand-500 text-xs"></i>
+                            <input id="share-code-input" type="text" placeholder="Nhập mã chia sẻ (VD: VOC-101)"
+                                class="w-full pl-8 pr-3 py-2 text-sm rounded-xl outline-none bg-transparent uppercase font-mono">
+                        </div>
+                        <button type="submit" class="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white text-xs font-semibold rounded-xl transition-all whitespace-nowrap">
+                            Mở mã
+                        </button>
+                    </form>
+                </div>
+
+                <!-- Community Search -->
+                <div class="relative max-w-md mb-6">
+                    <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm"></i>
+                    <input id="community-search" type="text" oninput="renderCommunityTopics()" placeholder="Tìm chủ đề công khai hoặc tác giả..."
+                        class="w-full pl-10 pr-4 py-2.5 bg-white rounded-xl border border-slate-200 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none text-sm shadow-sm">
+                </div>
+
+                <!-- Community Grid -->
+                <div id="community-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5"></div>
+            </section>
+
+            <!-- ========== VIEW 3: TOPIC DETAIL & WORD MANAGER ========== -->
+            <section id="view-topic-detail" class="app-view hidden animate-fade-in">
+                <div class="mb-5">
+                    <button onclick="goBackFromDetail()" class="inline-flex items-center gap-2 text-sm font-semibold text-slate-500 hover:text-brand-600 transition-colors">
+                        <i class="fa-solid fa-arrow-left"></i> Quay lại danh sách
+                    </button>
+                </div>
+
+                <!-- Topic Header Banner -->
+                <div class="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-sm mb-6">
+                    <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-5">
+                        <div class="space-y-2">
+                            <div class="flex flex-wrap items-center gap-2">
+                                <span id="detail-visibility-badge" class="px-2.5 py-1 rounded-lg text-xs font-bold"></span>
+                                <span id="detail-code-badge" class="px-2.5 py-1 rounded-lg text-xs font-mono font-semibold bg-slate-100 text-slate-600"></span>
+                                <span id="detail-author-badge" class="text-xs text-slate-500 font-medium"></span>
+                            </div>
+                            <h2 id="detail-title" class="text-2xl font-extrabold text-slate-900">Tên chủ đề</h2>
+                            <p id="detail-desc" class="text-sm text-slate-500 max-w-2xl">Mô tả chủ đề</p>
+                        </div>
+
+                        <div class="flex flex-wrap items-center gap-2.5">
+                            <button onclick="startFlashcard(currentTopicId)" class="px-4 py-2.5 bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold rounded-xl shadow-sm transition-all flex items-center gap-2">
+                                <i class="fa-solid fa-clone"></i> Học Flashcard
+                            </button>
+                            <button onclick="startTyping(currentTopicId)" class="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold rounded-xl shadow-sm transition-all flex items-center gap-2">
+                                <i class="fa-solid fa-keyboard"></i> Luyện gõ
+                            </button>
+                            <button id="detail-share-btn" onclick="openShareModal(currentTopicId)" class="px-3.5 py-2.5 bg-brand-50 hover:bg-brand-100 text-brand-700 text-sm font-semibold rounded-xl transition-all flex items-center gap-1.5">
+                                <i class="fa-solid fa-share-nodes"></i> Chia sẻ
+                            </button>
+                            <button id="detail-edit-topic-btn" onclick="openTopicModal(currentTopicId)" class="px-3.5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-semibold rounded-xl transition-all flex items-center gap-1.5">
+                                <i class="fa-solid fa-pen"></i> Sửa
+                            </button>
+                            <button id="detail-clone-btn" onclick="cloneTopic(currentTopicId)" class="hidden px-3.5 py-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-sm font-semibold rounded-xl transition-all flex items-center gap-1.5">
+                                <i class="fa-solid fa-copy"></i> Lưu bản sao về máy
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Add Word Form (Visible only to Owner or Admin) -->
+                <div id="add-word-panel" class="bg-white rounded-3xl p-5 sm:p-6 border border-slate-200/80 shadow-sm mb-6">
+                    <div class="flex flex-wrap items-center justify-between gap-2 mb-3.5">
+                        <h3 class="text-sm font-bold text-slate-800 flex items-center gap-2">
+                            <i class="fa-solid fa-circle-plus text-brand-600"></i> Thêm từ vựng mới vào chủ đề
+                        </h3>
+                        <span class="text-[11px] text-slate-400">
+                            <i class="fa-solid fa-wand-magic-sparkles text-brand-500 mr-1"></i>Tự động tra phiên âm IPA & âm thanh chuẩn khi nhập từ
+                        </span>
+                    </div>
+                    <form onsubmit="handleAddWord(event)" class="grid grid-cols-1 sm:grid-cols-12 gap-3">
+                        <input type="hidden" id="new-word-audio" value="">
+                        <div class="sm:col-span-4">
+                            <input id="new-word-en" type="text" required oninput="onNewWordInput()" placeholder="Từ tiếng Anh (VD: Accomplish)"
+                                class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none text-sm">
+                        </div>
+                        <div class="sm:col-span-3">
+                            <input id="new-word-vi" type="text" required placeholder="Nghĩa tiếng Việt (VD: Hoàn thành)"
+                                class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none text-sm">
+                        </div>
+                        <div class="sm:col-span-3 flex gap-1.5">
+                            <input id="new-word-phonetic" type="text" placeholder="Phiên âm (/.../)"
+                                class="w-full px-3 py-2.5 rounded-xl border border-slate-200 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none text-sm font-mono">
+                            <button type="button" id="btn-fetch-new-ipa" onclick="fetchNewWordIPA()" title="Lấy phiên âm IPA tự động"
+                                class="px-3 py-2.5 rounded-xl bg-brand-50 hover:bg-brand-100 text-brand-700 border border-brand-200/80 text-xs font-semibold transition-all whitespace-nowrap flex items-center gap-1 shrink-0">
+                                <i class="fa-solid fa-wand-magic-sparkles"></i>
+                                <span>Lấy IPA</span>
+                            </button>
+                        </div>
+                        <div class="sm:col-span-2">
+                            <button type="submit" class="w-full py-2.5 bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold rounded-xl transition-all shadow-sm">
+                                <i class="fa-solid fa-plus mr-1"></i> Thêm từ
+                            </button>
+                        </div>
+                    </form>
+                    <div id="new-ipa-status" class="hidden mt-2.5 text-xs font-medium flex items-center gap-1.5"></div>
+                </div>
+
+                <!-- Words List -->
+                <div class="bg-white rounded-3xl border border-slate-200/80 shadow-sm overflow-hidden">
+                    <div class="px-6 py-4 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3">
+                        <h3 class="font-bold text-slate-800 text-sm">Danh sách từ vựng (<span id="detail-word-count">0</span> từ)</h3>
+                        <button id="btn-bulk-ipa" onclick="bulkFillMissingIPA()" class="hidden px-3.5 py-1.5 rounded-xl bg-brand-50 hover:bg-brand-100 text-brand-700 border border-brand-200 text-xs font-semibold transition-all flex items-center gap-1.5">
+                            <i class="fa-solid fa-wand-magic-sparkles"></i>
+                            <span id="btn-bulk-ipa-text">Tự động điền IPA cho từ còn thiếu</span>
+                        </button>
+                    </div>
+                    <div id="detail-words-list" class="divide-y divide-slate-100"></div>
+                </div>
+            </section>
+
+            <!-- ========== VIEW 4: FLASHCARD STUDY MODE ========== -->
+            <section id="view-flashcard" class="app-view hidden animate-fade-in max-w-3xl mx-auto">
+                <!-- Top Bar -->
+                <div class="flex flex-wrap items-center justify-between gap-3 mb-5">
+                    <button onclick="openTopicDetail(currentTopicId)" class="inline-flex items-center gap-2 text-sm font-semibold text-slate-500 hover:text-brand-600 transition-colors">
+                        <i class="fa-solid fa-arrow-left"></i> Thoát Flashcard
+                    </button>
+                    <div class="text-sm font-bold text-slate-800 truncate max-w-xs sm:max-w-md" id="fc-topic-title">Chủ đề</div>
+                    <div class="flex items-center gap-2">
+                        <button onclick="toggleFlashcardDirection()" id="fc-dir-btn" class="px-3 py-1.5 rounded-xl bg-white border border-slate-200 hover:border-brand-400 text-xs font-semibold text-slate-700 transition-all shadow-sm flex items-center gap-1.5">
+                            <i class="fa-solid fa-arrows-left-right text-brand-600"></i> <span id="fc-dir-label">Anh → Việt</span>
+                        </button>
+                        <button onclick="shuffleFlashcards()" class="px-3 py-1.5 rounded-xl bg-white border border-slate-200 hover:border-brand-400 text-xs font-semibold text-slate-700 transition-all shadow-sm flex items-center gap-1.5" title="Xáo trộn thẻ">
+                            <i class="fa-solid fa-shuffle text-brand-600"></i> Xáo trộn
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Progress & Status Filter -->
+                <div class="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-sm mb-6">
+                    <div class="flex flex-wrap items-center justify-between gap-2 text-xs font-semibold mb-2">
+                        <span class="text-slate-600">Thẻ <span id="fc-current-idx" class="text-brand-600 font-bold">1</span> / <span id="fc-total-count">0</span></span>
+                        <div class="flex items-center gap-3">
+                            <span class="text-emerald-600"><i class="fa-solid fa-circle-check mr-1"></i>Đã thuộc: <span id="fc-known-count">0</span></span>
+                            <span class="text-amber-600"><i class="fa-solid fa-rotate-right mr-1"></i>Cần ôn: <span id="fc-review-count">0</span></span>
+                        </div>
+                    </div>
+                    <div class="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+                        <div id="fc-progress-bar" class="h-full bg-gradient-to-r from-brand-500 to-emerald-500 transition-all duration-300" style="width: 0%"></div>
+                    </div>
+                    <div class="flex items-center justify-between mt-3 pt-2.5 border-t border-slate-100">
+                        <span class="text-[11px] text-slate-400"><i class="fa-regular fa-keyboard mr-1"></i>Phím tắt: Space để lật, ←/→ để chuyển thẻ</span>
+                        <button id="fc-filter-review-btn" onclick="toggleReviewOnlyFilter()" class="text-xs font-semibold text-amber-600 hover:text-amber-700 hidden">
+                            Chỉ ôn thẻ chưa thuộc
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 3D Flip Card -->
+                <div class="perspective-1000 w-full h-80 sm:h-96 cursor-pointer select-none mb-6" onclick="flipCard()">
+                    <div id="fc-card-inner" class="flip-card-inner">
+                        <!-- Front Face -->
+                        <div class="flip-card-front absolute inset-0 bg-white border-2 border-brand-100 shadow-xl shadow-blue-900/5 flex flex-col items-center justify-center p-8 text-center">
+                            <span id="fc-front-lang" class="absolute top-5 left-6 px-3 py-1 rounded-full bg-brand-50 text-brand-600 text-xs font-bold uppercase tracking-wider">Tiếng Anh</span>
+                            <span id="fc-status-pill" class="absolute top-5 right-6 px-3 py-1 rounded-full text-xs font-bold hidden"></span>
+
+                            <div id="fc-front-text" class="text-3xl sm:text-5xl font-extrabold text-slate-900 break-words max-w-full">Word</div>
+                            <div id="fc-front-phonetic" class="text-base sm:text-lg text-slate-400 font-mono mt-3"></div>
+
+                            <button id="fc-front-speak" onclick="speakCurrentCard(event, 'front')" class="mt-6 w-12 h-12 rounded-full bg-brand-50 hover:bg-brand-100 text-brand-600 flex items-center justify-center transition-all active:scale-95 shadow-sm" title="Nghe phát âm">
+                                <i class="fa-solid fa-volume-high text-lg"></i>
+                            </button>
+                            <div class="absolute bottom-5 text-xs text-slate-400 flex items-center gap-1.5">
+                                <i class="fa-solid fa-hand-pointer"></i> Nhấn vào thẻ để lật mặt sau
+                            </div>
+                        </div>
+
+                        <!-- Back Face -->
+                        <div class="flip-card-back absolute inset-0 bg-gradient-to-br from-brand-600 to-blue-700 text-white shadow-xl shadow-brand-900/15 flex flex-col items-center justify-center p-8 text-center">
+                            <span id="fc-back-lang" class="absolute top-5 left-6 px-3 py-1 rounded-full bg-white/20 text-white text-xs font-bold uppercase tracking-wider">Nghĩa tiếng Việt</span>
+
+                            <div id="fc-back-text" class="text-2xl sm:text-4xl font-extrabold break-words max-w-full">Nghĩa</div>
+                            <div id="fc-back-phonetic" class="text-base text-blue-200 font-mono mt-3"></div>
+
+                            <button id="fc-back-speak" onclick="speakCurrentCard(event, 'back')" class="mt-6 w-12 h-12 rounded-full bg-white/20 hover:bg-white/30 text-white flex items-center justify-center transition-all active:scale-95 hidden" title="Nghe phát âm">
+                                <i class="fa-solid fa-volume-high text-lg"></i>
+                            </button>
+                            <div class="absolute bottom-5 text-xs text-blue-200 flex items-center gap-1.5">
+                                <i class="fa-solid fa-rotate"></i> Nhấn để lật lại
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Controls Row -->
+                <div class="flex flex-col sm:flex-row items-center justify-between gap-4">
+                    <!-- Mark Status -->
+                    <div class="flex items-center gap-2.5 w-full sm:w-auto">
+                        <button onclick="markCardStatus('review')" class="flex-1 sm:flex-initial px-4 py-3 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 font-semibold text-sm transition-all flex items-center justify-center gap-2">
+                            <i class="fa-solid fa-rotate-left"></i> Cần ôn lại
+                        </button>
+                        <button onclick="markCardStatus('known')" class="flex-1 sm:flex-initial px-4 py-3 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 font-semibold text-sm transition-all flex items-center justify-center gap-2">
+                            <i class="fa-solid fa-check"></i> Đã thuộc
+                        </button>
+                    </div>
+
+                    <!-- Navigation -->
+                    <div class="flex items-center gap-2.5 w-full sm:w-auto justify-center">
+                        <button onclick="prevCard()" class="px-4 py-3 rounded-xl bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 font-semibold text-sm shadow-sm transition-all flex items-center gap-2">
+                            <i class="fa-solid fa-chevron-left"></i> Trước
+                        </button>
+                        <button onclick="flipCard()" class="px-5 py-3 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-semibold text-sm shadow-md shadow-brand-600/20 transition-all flex items-center gap-2">
+                            <i class="fa-solid fa-repeat"></i> Lật thẻ
+                        </button>
+                        <button onclick="nextCard()" class="px-4 py-3 rounded-xl bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 font-semibold text-sm shadow-sm transition-all flex items-center gap-2">
+                            Tiếp <i class="fa-solid fa-chevron-right"></i>
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ========== VIEW 5: TYPING PRACTICE MODE ========== -->
+            <section id="view-typing" class="app-view hidden animate-fade-in max-w-2xl mx-auto">
+                <div class="flex items-center justify-between mb-5">
+                    <button onclick="openTopicDetail(currentTopicId)" class="inline-flex items-center gap-2 text-sm font-semibold text-slate-500 hover:text-brand-600 transition-colors">
+                        <i class="fa-solid fa-arrow-left"></i> Thoát luyện gõ
+                    </button>
+                    <div class="text-sm font-bold text-slate-800 truncate max-w-xs" id="tp-topic-title">Chủ đề</div>
+                </div>
+
+                <!-- Mode Selector -->
+                <div class="bg-white p-1.5 rounded-2xl border border-slate-200/80 shadow-sm flex gap-1.5 mb-6">
+                    <button id="tp-mode-vi-en" onclick="setTypingMode('vi-to-en')" class="flex-1 py-2.5 px-3 rounded-xl text-xs sm:text-sm font-semibold transition-all">
+                        <i class="fa-solid fa-language mr-1.5"></i>Biết nghĩa → Nhập Tiếng Anh
+                    </button>
+                    <button id="tp-mode-en-vi" onclick="setTypingMode('en-to-vi')" class="flex-1 py-2.5 px-3 rounded-xl text-xs sm:text-sm font-semibold transition-all">
+                        <i class="fa-solid fa-book mr-1.5"></i>Biết Tiếng Anh → Nhập Nghĩa
+                    </button>
+                </div>
+
+                <!-- Active Quiz Card -->
+                <div id="tp-quiz-container" class="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200/80 shadow-lg shadow-blue-900/5">
+                    <!-- Progress Header -->
+                    <div class="flex items-center justify-between text-xs font-semibold text-slate-500 mb-2">
+                        <span>Câu <span id="tp-current-num" class="text-brand-600 font-bold">1</span> / <span id="tp-total-num">0</span></span>
+                        <span class="text-emerald-600">Đúng: <span id="tp-score-num">0</span></span>
+                    </div>
+                    <div class="w-full h-2 bg-slate-100 rounded-full overflow-hidden mb-7">
+                        <div id="tp-progress-bar" class="h-full bg-brand-600 transition-all duration-300" style="width: 0%"></div>
+                    </div>
+
+                    <!-- Prompt Area -->
+                    <div class="text-center mb-7">
+                        <span id="tp-prompt-label" class="inline-block px-3 py-1 rounded-full bg-brand-50 text-brand-700 text-xs font-bold uppercase tracking-wider mb-3">Nghĩa tiếng Việt</span>
+                        <div class="flex items-center justify-center gap-3">
+                            <h3 id="tp-prompt-word" class="text-2xl sm:text-4xl font-extrabold text-slate-900">Câu hỏi</h3>
+                            <button id="tp-speak-btn" onclick="speakTypingPrompt()" class="hidden w-10 h-10 rounded-full bg-brand-50 hover:bg-brand-100 text-brand-600 flex items-center justify-center transition-all">
+                                <i class="fa-solid fa-volume-high"></i>
+                            </button>
+                        </div>
+                        <div id="tp-prompt-phonetic" class="text-sm text-slate-400 font-mono mt-1.5"></div>
+                        <div id="tp-hint-box" class="hidden mt-3 inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-amber-50 text-amber-700 text-xs font-mono font-semibold border border-amber-200"></div>
+                    </div>
+
+                    <!-- Input Form -->
+                    <form id="tp-answer-form" onsubmit="handleTypingSubmit(event)" class="space-y-4">
+                        <input id="tp-answer-input" type="text" autocomplete="off" placeholder="Gõ câu trả lời của bạn..."
+                            class="w-full px-4 py-3.5 rounded-2xl border-2 border-slate-200 focus:border-brand-500 focus:ring-4 focus:ring-brand-500/15 outline-none text-base font-medium text-center transition-all">
+
+                        <!-- Feedback Banner -->
+                        <div id="tp-feedback" class="hidden p-4 rounded-2xl text-sm font-medium"></div>
+
+                        <div class="flex items-center gap-3 pt-1">
+                            <button id="tp-hint-btn" type="button" onclick="showTypingHint()" class="px-4 py-3 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-700 font-semibold text-sm transition-all flex items-center gap-1.5">
+                                <i class="fa-regular fa-lightbulb"></i> Gợi ý
+                            </button>
+                            <button id="tp-submit-btn" type="submit" class="flex-1 py-3 bg-brand-600 hover:bg-brand-700 text-white font-semibold rounded-xl shadow-md shadow-brand-600/20 transition-all">
+                                Kiểm tra đáp án
+                            </button>
+                            <button id="tp-next-btn" type="button" onclick="nextTypingQuestion()" class="hidden flex-1 py-3 bg-slate-900 hover:bg-slate-800 text-white font-semibold rounded-xl shadow-md transition-all">
+                                Câu tiếp theo <i class="fa-solid fa-arrow-right ml-1.5"></i>
+                            </button>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- Summary Screen -->
+                <div id="tp-summary-container" class="hidden bg-white rounded-3xl p-6 sm:p-8 border border-slate-200/80 shadow-lg text-center animate-fade-in">
+                    <div class="w-16 h-16 rounded-2xl bg-brand-100 text-brand-600 flex items-center justify-center text-3xl mx-auto mb-4">
+                        <i class="fa-solid fa-trophy"></i>
+                    </div>
+                    <h3 class="text-2xl font-extrabold text-slate-900">Hoàn thành bài luyện tập!</h3>
+                    <p id="tp-summary-msg" class="text-sm text-slate-500 mt-1">Bạn đã làm rất tốt!</p>
+
+                    <div class="grid grid-cols-3 gap-3 my-6">
+                        <div class="p-4 rounded-2xl bg-slate-50 border border-slate-100">
+                            <div class="text-xs text-slate-500 font-semibold">Tổng số câu</div>
+                            <div id="tp-sum-total" class="text-2xl font-extrabold text-slate-800 mt-1">0</div>
+                        </div>
+                        <div class="p-4 rounded-2xl bg-emerald-50 border border-emerald-100">
+                            <div class="text-xs text-emerald-600 font-semibold">Trả lời đúng</div>
+                            <div id="tp-sum-correct" class="text-2xl font-extrabold text-emerald-700 mt-1">0</div>
+                        </div>
+                        <div class="p-4 rounded-2xl bg-brand-50 border border-brand-100">
+                            <div class="text-xs text-brand-600 font-semibold">Độ chính xác</div>
+                            <div id="tp-sum-acc" class="text-2xl font-extrabold text-brand-700 mt-1">0%</div>
+                        </div>
+                    </div>
+
+                    <!-- Wrong Words List -->
+                    <div id="tp-wrong-section" class="hidden text-left mb-6">
+                        <h4 class="text-xs font-bold uppercase tracking-wider text-rose-600 mb-2.5">Danh sách từ cần ôn lại:</h4>
+                        <div id="tp-wrong-list" class="space-y-2 max-h-52 overflow-y-auto pr-1"></div>
+                    </div>
+
+                    <div class="flex flex-wrap items-center justify-center gap-3">
+                        <button id="tp-retry-wrong-btn" onclick="retryWrongTyping()" class="hidden px-5 py-2.5 bg-amber-500 hover:bg-amber-600 text-white text-sm font-semibold rounded-xl shadow-sm transition-all">
+                            <i class="fa-solid fa-rotate-right mr-1.5"></i> Ôn lại các từ sai
+                        </button>
+                        <button onclick="startTyping(currentTopicId)" class="px-5 py-2.5 bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold rounded-xl shadow-sm transition-all">
+                            <i class="fa-solid fa-play mr-1.5"></i> Luyện lại toàn bộ
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ========== VIEW 6: ADMIN DASHBOARD ========== -->
+            <section id="view-admin" class="app-view hidden animate-fade-in">
+                <div class="mb-6">
+                    <h2 class="text-2xl font-extrabold text-slate-900 flex items-center gap-2.5">
+                        <i class="fa-solid fa-shield-halved text-brand-600"></i> Bảng Điều Khiển Quản Trị
+                    </h2>
+                    <p class="text-sm text-slate-500 mt-0.5">Quản lý toàn bộ người dùng, phân quyền và kiểm duyệt chủ đề trên hệ thống.</p>
+                </div>
+
+                <!-- KPI Cards -->
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+                    <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex items-center gap-4">
+                        <div class="w-12 h-12 rounded-xl bg-blue-50 text-brand-600 flex items-center justify-center text-xl">
+                            <i class="fa-solid fa-users"></i>
+                        </div>
+                        <div>
+                            <div class="text-xs font-semibold text-slate-500 uppercase">Tổng tài khoản</div>
+                            <div id="admin-stat-users" class="text-2xl font-extrabold text-slate-900">0</div>
+                        </div>
+                    </div>
+                    <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex items-center gap-4">
+                        <div class="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-xl">
+                            <i class="fa-solid fa-layer-group"></i>
+                        </div>
+                        <div>
+                            <div class="text-xs font-semibold text-slate-500 uppercase">Tổng chủ đề</div>
+                            <div id="admin-stat-topics" class="text-2xl font-extrabold text-slate-900">0</div>
+                        </div>
+                    </div>
+                    <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex items-center gap-4">
+                        <div class="w-12 h-12 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center text-xl">
+                            <i class="fa-solid fa-spell-check"></i>
+                        </div>
+                        <div>
+                            <div class="text-xs font-semibold text-slate-500 uppercase">Tổng từ vựng</div>
+                            <div id="admin-stat-words" class="text-2xl font-extrabold text-slate-900">0</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Admin Sub-tabs -->
+                <div class="flex gap-2 mb-5 border-b border-slate-200 pb-3">
+                    <button id="admin-tab-users" onclick="switchAdminTab('users')" class="px-4 py-2 rounded-xl text-sm font-semibold transition-all bg-brand-600 text-white shadow-sm">
+                        <i class="fa-solid fa-user-gear mr-1.5"></i> Quản lý Tài khoản
+                    </button>
+                    <button id="admin-tab-topics" onclick="switchAdminTab('topics')" class="px-4 py-2 rounded-xl text-sm font-semibold transition-all bg-white text-slate-600 border border-slate-200 hover:bg-slate-50">
+                        <i class="fa-solid fa-folder-tree mr-1.5"></i> Quản lý Chủ đề
+                    </button>
+                </div>
+
+                <!-- Admin Users Table -->
+                <div id="admin-panel-users" class="bg-white rounded-3xl border border-slate-200/80 shadow-sm overflow-hidden">
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left border-collapse">
+                            <thead>
+                                <tr class="bg-slate-50 border-b border-slate-100 text-xs font-bold text-slate-500 uppercase">
+                                    <th class="py-3.5 px-5">Người dùng</th>
+                                    <th class="py-3.5 px-5">Tên đăng nhập</th>
+                                    <th class="py-3.5 px-5">Vai trò</th>
+                                    <th class="py-3.5 px-5">Trạng thái</th>
+                                    <th class="py-3.5 px-5 text-right">Thao tác</th>
+                                </tr>
+                            </thead>
+                            <tbody id="admin-users-tbody" class="divide-y divide-slate-100 text-sm"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Admin Topics Table -->
+                <div id="admin-panel-topics" class="hidden bg-white rounded-3xl border border-slate-200/80 shadow-sm overflow-hidden">
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left border-collapse">
+                            <thead>
+                                <tr class="bg-slate-50 border-b border-slate-100 text-xs font-bold text-slate-500 uppercase">
+                                    <th class="py-3.5 px-5">Chủ đề</th>
+                                    <th class="py-3.5 px-5">Tác giả</th>
+                                    <th class="py-3.5 px-5">Số từ</th>
+                                    <th class="py-3.5 px-5">Chế độ</th>
+                                    <th class="py-3.5 px-5 text-right">Thao tác</th>
+                                </tr>
+                            </thead>
+                            <tbody id="admin-topics-tbody" class="divide-y divide-slate-100 text-sm"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- ==================== MODALS ==================== -->
+
+    <!-- Create/Edit Topic Modal -->
+    <div id="topic-modal" class="hidden fixed inset-0 z-40 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+        <div class="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl animate-fade-in">
+            <div class="flex items-center justify-between mb-4">
+                <h3 id="topic-modal-title" class="text-lg font-extrabold text-slate-900">Tạo chủ đề mới</h3>
+                <button onclick="closeModal('topic-modal')" class="w-8 h-8 rounded-full hover:bg-slate-100 text-slate-400 flex items-center justify-center">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+            <form onsubmit="handleSaveTopic(event)" class="space-y-4">
+                <input type="hidden" id="topic-modal-id">
+                <div>
+                    <label class="block text-xs font-bold text-slate-600 uppercase mb-1.5">Tên chủ đề *</label>
+                    <input id="topic-modal-name" type="text" required placeholder="VD: Tiếng Anh Du Lịch"
+                        class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none text-sm">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-600 uppercase mb-1.5">Mô tả ngắn</label>
+                    <textarea id="topic-modal-desc" rows="3" placeholder="Mô tả nội dung bộ từ vựng..."
+                        class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none text-sm resize-none"></textarea>
+                </div>
+                <div class="flex items-center justify-between p-3.5 rounded-2xl bg-slate-50 border border-slate-200/70">
+                    <div>
+                        <div class="text-sm font-bold text-slate-800">Chia sẻ công khai</div>
+                        <div class="text-xs text-slate-500">Hiển thị trong mục Cộng đồng cho mọi người học</div>
+                    </div>
+                    <label class="relative inline-flex items-center cursor-pointer">
+                        <input id="topic-modal-public" type="checkbox" class="sr-only peer">
+                        <div class="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-brand-600"></div>
+                    </label>
+                </div>
+                <div class="flex justify-end gap-2.5 pt-2">
+                    <button type="button" onclick="closeModal('topic-modal')" class="px-4 py-2.5 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-100">Hủy</button>
+                    <button type="submit" class="px-5 py-2.5 rounded-xl text-sm font-semibold bg-brand-600 hover:bg-brand-700 text-white shadow-sm">Lưu chủ đề</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Edit Word Modal -->
+    <div id="word-modal" class="hidden fixed inset-0 z-40 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+        <div class="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl animate-fade-in">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-lg font-extrabold text-slate-900">Chỉnh sửa từ vựng</h3>
+                <button onclick="closeModal('word-modal')" class="w-8 h-8 rounded-full hover:bg-slate-100 text-slate-400 flex items-center justify-center">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+            <form onsubmit="handleUpdateWord(event)" class="space-y-4">
+                <input type="hidden" id="edit-word-id">
+                <input type="hidden" id="edit-word-audio" value="">
+                <div>
+                    <label class="block text-xs font-bold text-slate-600 uppercase mb-1.5">Từ tiếng Anh *</label>
+                    <input id="edit-word-en" type="text" required oninput="onEditWordInput()" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:border-brand-500 outline-none text-sm">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-600 uppercase mb-1.5">Nghĩa tiếng Việt *</label>
+                    <input id="edit-word-vi" type="text" required class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:border-brand-500 outline-none text-sm">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-600 uppercase mb-1.5">Phiên âm IPA (tự động hoặc nhập tay)</label>
+                    <div class="flex gap-2">
+                        <input id="edit-word-phonetic" type="text" class="flex-1 px-3.5 py-2.5 rounded-xl border border-slate-200 focus:border-brand-500 outline-none text-sm font-mono">
+                        <button type="button" id="btn-fetch-edit-ipa" onclick="fetchEditWordIPA()" class="px-3.5 py-2.5 rounded-xl bg-brand-50 hover:bg-brand-100 text-brand-700 border border-brand-200 text-xs font-semibold transition-all whitespace-nowrap flex items-center gap-1">
+                            <i class="fa-solid fa-wand-magic-sparkles"></i> Lấy IPA
+                        </button>
+                    </div>
+                    <div id="edit-ipa-status" class="hidden mt-2 text-xs font-medium flex items-center gap-1.5"></div>
+                </div>
+                <div class="flex justify-end gap-2.5 pt-2">
+                    <button type="button" onclick="closeModal('word-modal')" class="px-4 py-2.5 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-100">Hủy</button>
+                    <button type="submit" class="px-5 py-2.5 rounded-xl text-sm font-semibold bg-brand-600 hover:bg-brand-700 text-white shadow-sm">Cập nhật</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Share Modal -->
+    <div id="share-modal" class="hidden fixed inset-0 z-40 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+        <div class="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl animate-fade-in">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-lg font-extrabold text-slate-900 flex items-center gap-2">
+                    <i class="fa-solid fa-share-nodes text-brand-600"></i> Chia sẻ chủ đề
+                </h3>
+                <button onclick="closeModal('share-modal')" class="w-8 h-8 rounded-full hover:bg-slate-100 text-slate-400 flex items-center justify-center">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+            <div class="space-y-4">
+                <div class="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80 flex items-center justify-between">
+                    <div>
+                        <div class="text-sm font-bold text-slate-800">Hiển thị ở Cộng đồng</div>
+                        <div class="text-xs text-slate-500">Cho phép mọi người tìm thấy và học</div>
+                    </div>
+                    <label class="relative inline-flex items-center cursor-pointer">
+                        <input id="share-modal-public-toggle" type="checkbox" onchange="toggleShareModalPublic()" class="sr-only peer">
+                        <div class="w-11 h-6 bg-slate-300 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-brand-600"></div>
+                    </label>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-slate-600 uppercase mb-1.5">Mã chia sẻ nhanh</label>
+                    <div class="flex items-center gap-2">
+                        <input id="share-modal-code" type="text" readonly class="flex-1 px-3.5 py-2.5 rounded-xl bg-brand-50 border border-brand-200 text-brand-800 font-mono font-bold text-center tracking-widest text-sm">
+                        <button onclick="copyShareCode()" class="px-4 py-2.5 bg-brand-600 hover:bg-brand-700 text-white text-xs font-semibold rounded-xl transition-all">
+                            <i class="fa-regular fa-copy mr-1"></i> Sao chép mã
+                        </button>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-slate-600 uppercase mb-1.5">Link chia sẻ</label>
+                    <div class="flex items-center gap-2">
+                        <input id="share-modal-link" type="text" readonly class="flex-1 px-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-600 text-xs truncate">
+                        <button onclick="copyShareLink()" class="px-4 py-2.5 bg-slate-800 hover:bg-slate-900 text-white text-xs font-semibold rounded-xl transition-all whitespace-nowrap">
+                            <i class="fa-solid fa-link mr-1"></i> Copy link
+                        </button>
+                    </div>
+                    <p class="text-[11px] text-slate-400 mt-2">Người nhận có thể nhập mã chia sẻ ở mục <b>Cộng đồng</b> để mở học ngay hoặc sao chép về tài khoản của họ.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Custom Confirm Modal -->
+    <div id="confirm-modal" class="hidden fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+        <div class="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl animate-fade-in text-center">
+            <div class="w-12 h-12 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center text-xl mx-auto mb-3">
+                <i class="fa-solid fa-triangle-exclamation"></i>
+            </div>
+            <h3 id="confirm-title" class="text-lg font-extrabold text-slate-900">Xác nhận</h3>
+            <p id="confirm-message" class="text-sm text-slate-500 mt-1.5 mb-6">Bạn có chắc chắn muốn thực hiện thao tác này?</p>
+            <div class="flex items-center gap-3">
+                <button onclick="closeConfirmModal(false)" class="flex-1 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-semibold transition-all">Hủy bỏ</button>
+                <button onclick="closeConfirmModal(true)" class="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-sm font-semibold shadow-sm transition-all">Xác nhận</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== APPLICATION LOGIC & FIREBASE ==================== -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, doc, setDoc, updateDoc, deleteDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // ============================================================
+        // 1. GLOBAL STATE & DEFAULT SEED DATA
+        // ============================================================
+        let db = null;
+        let auth = null;
+        let fbUser = null;
+        let useFirebase = false;
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'vocaflow-default';
+
+        // In-memory mirrored data (synced with Firestore & localStorage)
+        let appUsers = [];
+        let appTopics = [];
+        let appProgress = {}; // { `${userId}_${topicId}`: { wordId: 'known' | 'review' } }
+        let currentUser = null;
+        let currentView = 'my-topics';
+        let previousView = 'my-topics';
+        let currentTopicId = null;
+        let shareModalTopicId = null;
+        let confirmCallback = null;
+
+        // Debounce timers & Audio player for Dictionary API
+        let newWordDebounceTimer = null;
+        let editWordDebounceTimer = null;
+        let activeAudioPlayer = null;
+
+        // Flashcard State
+        let fcState = {
+            words: [],
+            filteredIndices: [],
+            currentIndex: 0,
+            isFlipped: false,
+            direction: 'en-to-vi', // 'en-to-vi' | 'vi-to-en'
+            statuses: {}, // { wordId: 'known' | 'review' }
+            reviewOnly: false
+        };
+
+        // Typing Practice State
+        let tpState = {
+            mode: 'vi-to-en', // 'vi-to-en' | 'en-to-vi'
+            queue: [],
+            currentIndex: 0,
+            score: 0,
+            wrongWords: [],
+            answered: false,
+            hintLevel: 0
+        };
+
+        // Default Seed Accounts
+        const SEED_USERS = [
+            {
+                id: 'user_admin_default',
+                username: 'admin',
+                displayName: 'Quản trị viên',
+                password: 'admin123',
+                role: 'admin',
+                locked: false,
+                createdAt: new Date().toISOString()
+            },
+            {
+                id: 'user_demo_student',
+                username: 'hocvien',
+                displayName: 'Minh Anh',
+                password: '123456',
+                role: 'user',
+                locked: false,
+                createdAt: new Date().toISOString()
+            }
+        ];
+
+        // Default Seed Public Topics (Thuộc về tài khoản học viên thường)
+        const SEED_TOPICS = [
+            {
+                id: 'topic_seed_comm',
+                title: 'Tiếng Anh Giao Tiếp Cơ Bản',
+                description: 'Những từ vựng và cụm từ thiết yếu dùng hàng ngày trong giao tiếp công sở và đời sống.',
+                ownerId: 'user_demo_student',
+                ownerName: 'Minh Anh',
+                isPublic: true,
+                shareCode: 'VOC-101',
+                createdAt: new Date().toISOString(),
+                words: [
+                    { id: 'w1', en: 'Appreciate', vi: 'Đánh giá cao, cảm kích', phonetic: '/əˈpriːʃieɪt/' },
+                    { id: 'w2', en: 'Schedule', vi: 'Lịch trình', phonetic: '/ˈskedʒuːl/' },
+                    { id: 'w3', en: 'Colleague', vi: 'Đồng nghiệp', phonetic: '/ˈkɒliːɡ/' },
+                    { id: 'w4', en: 'Opportunity', vi: 'Cơ hội', phonetic: '/ˌɒpəˈtjuːnəti/' },
+                    { id: 'w5', en: 'Recommend', vi: 'Đề xuất, giới thiệu', phonetic: '/ˌrekəˈmend/' },
+                    { id: 'w6', en: 'Convenient', vi: 'Thuận tiện', phonetic: '/kənˈviːniənt/' },
+                    { id: 'w7', en: 'Experience', vi: 'Kinh nghiệm, trải nghiệm', phonetic: '/ɪkˈspɪəriəns/' },
+                    { id: 'w8', en: 'Confidence', vi: 'Sự tự tin', phonetic: '/ˈkɒnfɪdəns/' }
+                ]
+            },
+            {
+                id: 'topic_seed_it',
+                title: 'Từ Vựng IT & Mạng Máy Tính',
+                description: 'Thuật ngữ chuyên ngành công nghệ thông tin, lập trình và quản trị hệ thống mạng.',
+                ownerId: 'user_demo_student',
+                ownerName: 'Minh Anh',
+                isPublic: true,
+                shareCode: 'VOC-202',
+                createdAt: new Date().toISOString(),
+                words: [
+                    { id: 'it1', en: 'Algorithm', vi: 'Thuật toán', phonetic: '/ˈælɡərɪðəm/' },
+                    { id: 'it2', en: 'Database', vi: 'Cơ sở dữ liệu', phonetic: '/ˈdeɪtəbeɪs/' },
+                    { id: 'it3', en: 'Bandwidth', vi: 'Băng thông', phonetic: '/ˈbændwɪdθ/' },
+                    { id: 'it4', en: 'Firewall', vi: 'Tường lửa', phonetic: '/ˈfaɪəwɔːl/' },
+                    { id: 'it5', en: 'Encryption', vi: 'Mã hóa', phonetic: '/ɪnˈkrɪpʃn/' },
+                    { id: 'it6', en: 'Server', vi: 'Máy chủ', phonetic: '/ˈsɜːvər/' },
+                    { id: 'it7', en: 'Repository', vi: 'Kho lưu trữ mã nguồn', phonetic: '/rɪˈpɒzətəri/' },
+                    { id: 'it8', en: 'Latency', vi: 'Độ trễ', phonetic: '/ˈleɪtənsi/' }
+                ]
+            }
+        ];
+
+        // Safe localStorage wrapper (prevents errors in restricted iframes)
+        const LS_KEYS = {
+            USERS: 'vocaflow_users_v2',
+            TOPICS: 'vocaflow_topics_v2',
+            PROGRESS: 'vocaflow_progress_v2',
+            SESSION: 'vocaflow_session_uid_v2'
+        };
+
+        const safeStorage = {
+            get(key) {
+                try {
+                    const raw = window.localStorage.getItem(key);
+                    return raw ? JSON.parse(raw) : null;
+                } catch (e) { return null; }
+            },
+            set(key, val) {
+                try {
+                    window.localStorage.setItem(key, JSON.stringify(val));
+                } catch (e) { /* ignore storage quota/iframe restrictions */ }
+            },
+            remove(key) {
+                try {
+                    window.localStorage.removeItem(key);
+                } catch (e) { /* ignore */ }
+            }
+        };
+
+        function syncToLocalStorage() {
+            safeStorage.set(LS_KEYS.USERS, appUsers);
+            safeStorage.set(LS_KEYS.TOPICS, appTopics);
+            safeStorage.set(LS_KEYS.PROGRESS, appProgress);
+        }
+
+        function setSaveStatus(state = 'saved') {
+            const badge = document.getElementById('save-status-badge');
+            if (!badge) return;
+            if (state === 'saving') {
+                badge.className = 'hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-brand-50 border border-brand-200/80 text-brand-700 text-[11px] font-semibold transition-all';
+                badge.innerHTML = '<i class="fa-solid fa-spinner fa-spin text-brand-600"></i><span>Đang lưu...</span>';
+            } else if (state === 'offline') {
+                badge.className = 'hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-amber-50 border border-amber-200/80 text-amber-700 text-[11px] font-semibold transition-all';
+                badge.innerHTML = '<i class="fa-solid fa-hard-drive text-amber-600"></i><span>Đã lưu cục bộ</span>';
+            } else {
+                badge.className = 'hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-emerald-50 border border-emerald-200/80 text-emerald-700 text-[11px] font-semibold transition-all';
+                badge.innerHTML = '<i class="fa-solid fa-circle-check text-emerald-600"></i><span>Đã lưu tự động</span>';
+            }
+        }
+
+        function hideLoading() {
+            const el = document.getElementById('loading-overlay');
+            el.classList.add('opacity-0');
+            setTimeout(() => el.classList.add('hidden'), 300);
+        }
+
+        // ============================================================
+        // 2. INITIALIZATION & FIREBASE + LOCALSTORAGE SYNC
+        // ============================================================
+        async function initApp() {
+            const syncLabel = document.getElementById('auth-sync-status');
+
+            // Load cached localStorage data first for instant availability
+            const cachedUsers = safeStorage.get(LS_KEYS.USERS);
+            const cachedTopics = safeStorage.get(LS_KEYS.TOPICS);
+            const cachedProgress = safeStorage.get(LS_KEYS.PROGRESS);
+
+            appUsers = (Array.isArray(cachedUsers) && cachedUsers.length > 0) ? cachedUsers : structuredClone(SEED_USERS);
+            appTopics = (Array.isArray(cachedTopics) && cachedTopics.length > 0) ? cachedTopics : structuredClone(SEED_TOPICS);
+            appProgress = (cachedProgress && typeof cachedProgress === 'object') ? cachedProgress : {};
+
+            try {
+                if (typeof __firebase_config !== 'undefined' && __firebase_config) {
+                    const firebaseConfig = JSON.parse(__firebase_config);
+                    const app = initializeApp(firebaseConfig);
+                    auth = getAuth(app);
+                    db = getFirestore(app);
+
+                    // RULE 3: Auth before any Firestore query
+                    if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                        await signInWithCustomToken(auth, __initial_auth_token);
+                    } else {
+                        await signInAnonymously(auth);
+                    }
+                    fbUser = auth.currentUser;
+
+                    if (fbUser) {
+                        useFirebase = true;
+                        syncLabel.innerHTML = `<span class="w-2 h-2 rounded-full bg-emerald-500"></span> Đồng bộ Cloud & LocalStorage`;
+                        await setupFirestoreListeners();
+                    }
+                }
+            } catch (err) {
+                console.warn('Firebase fallback mode active:', err);
+                useFirebase = false;
+            }
+
+            if (!useFirebase) {
+                syncLabel.innerHTML = `<span class="w-2 h-2 rounded-full bg-amber-500"></span> Lưu bền vững (LocalStorage)`;
+                syncToLocalStorage();
+                setSaveStatus('offline');
+            } else {
+                setSaveStatus('saved');
+            }
+
+            hideLoading();
+
+            // Auto-restore login session if saved
+            const savedUserId = safeStorage.get(LS_KEYS.SESSION);
+            if (savedUserId) {
+                const foundUser = appUsers.find(u => u.id === savedUserId && !u.locked);
+                if (foundUser) {
+                    currentUser = foundUser;
+                    enterMainApp();
+                    return;
+                } else {
+                    safeStorage.remove(LS_KEYS.SESSION);
+                }
+            }
+            showAuthScreen();
+        }
+
+        function setupFirestoreListeners() {
+            return new Promise((resolve) => {
+                if (!fbUser) { resolve(); return; }
+                let usersLoaded = false;
+                let topicsLoaded = false;
+                let progressLoaded = false;
+                let seededUsers = false;
+                let seededTopics = false;
+
+                const checkDone = () => {
+                    if (usersLoaded && topicsLoaded && progressLoaded) resolve();
+                };
+
+                // RULE 1: Strict public data paths
+                const usersCol = collection(db, 'artifacts', appId, 'public', 'data', 'vf_users');
+                const topicsCol = collection(db, 'artifacts', appId, 'public', 'data', 'vf_topics');
+                const progressCol = collection(db, 'artifacts', appId, 'public', 'data', 'vf_progress');
+
+                onSnapshot(usersCol, async (snapshot) => {
+                    const list = [];
+                    snapshot.forEach(d => list.push({ id: d.id, ...d.data() }));
+                    if (list.length === 0 && !seededUsers) {
+                        seededUsers = true;
+                        for (const u of appUsers) {
+                            await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'vf_users', u.id), u);
+                        }
+                    } else if (list.length > 0) {
+                        appUsers = list;
+                        safeStorage.set(LS_KEYS.USERS, appUsers);
+                        if (currentUser) {
+                            const updated = appUsers.find(u => u.id === currentUser.id);
+                            if (!updated || updated.locked) {
+                                handleLogout();
+                                showToast('Tài khoản của bạn đã bị khóa hoặc xóa bởi quản trị viên.', 'error');
+                            } else {
+                                currentUser = updated;
+                                updateNavbarUser();
+                            }
+                        }
+                        if (currentView === 'admin') renderAdminDashboard();
+                    }
+                    usersLoaded = true;
+                    checkDone();
+                }, (error) => {
+                    console.error('Users snapshot error:', error);
+                    usersLoaded = true;
+                    checkDone();
+                });
+
+                onSnapshot(topicsCol, async (snapshot) => {
+                    const list = [];
+                    snapshot.forEach(d => list.push({ id: d.id, ...d.data() }));
+                    if (list.length === 0 && !seededTopics) {
+                        seededTopics = true;
+                        for (const t of appTopics) {
+                            await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'vf_topics', t.id), t);
+                        }
+                    } else if (list.length > 0) {
+                        appTopics = list.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+                        safeStorage.set(LS_KEYS.TOPICS, appTopics);
+                        refreshCurrentView();
+                    }
+                    topicsLoaded = true;
+                    checkDone();
+                }, (error) => {
+                    console.error('Topics snapshot error:', error);
+                    topicsLoaded = true;
+                    checkDone();
+                });
+
+                onSnapshot(progressCol, (snapshot) => {
+                    const map = {};
+                    snapshot.forEach(d => {
+                        map[d.id] = d.data().statuses || {};
+                    });
+                    if (Object.keys(map).length > 0) {
+                        appProgress = { ...appProgress, ...map };
+                        safeStorage.set(LS_KEYS.PROGRESS, appProgress);
+                    }
+                    progressLoaded = true;
+                    checkDone();
+                }, (error) => {
+                    console.error('Progress snapshot error:', error);
+                    progressLoaded = true;
+                    checkDone();
+                });
+            });
+        }
+
+        // Data persistence helpers (Firestore + LocalStorage dual sync)
+        async function saveUserDoc(userObj) {
+            setSaveStatus('saving');
+            const idx = appUsers.findIndex(u => u.id === userObj.id);
+            if (idx >= 0) appUsers[idx] = userObj;
+            else appUsers.push(userObj);
+            safeStorage.set(LS_KEYS.USERS, appUsers);
+
+            if (useFirebase && fbUser) {
+                try {
+                    await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'vf_users', userObj.id), userObj);
+                    setSaveStatus('saved');
+                } catch (e) {
+                    console.error(e);
+                    setSaveStatus('offline');
+                }
+            } else {
+                setSaveStatus('offline');
+            }
+        }
+
+        async function deleteUserDoc(userId) {
+            setSaveStatus('saving');
+            appUsers = appUsers.filter(u => u.id !== userId);
+            safeStorage.set(LS_KEYS.USERS, appUsers);
+
+            if (useFirebase && fbUser) {
+                try {
+                    await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'vf_users', userId));
+                    setSaveStatus('saved');
+                } catch (e) {
+                    setSaveStatus('offline');
+                }
+            } else {
+                setSaveStatus('offline');
+            }
+        }
+
+        async function saveTopicDoc(topicObj) {
+            setSaveStatus('saving');
+            const idx = appTopics.findIndex(t => t.id === topicObj.id);
+            if (idx >= 0) appTopics[idx] = topicObj;
+            else appTopics.unshift(topicObj);
+            safeStorage.set(LS_KEYS.TOPICS, appTopics);
+
+            if (useFirebase && fbUser) {
+                try {
+                    await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'vf_topics', topicObj.id), topicObj);
+                    setSaveStatus('saved');
+                } catch (e) {
+                    console.error(e);
+                    setSaveStatus('offline');
+                }
+            } else {
+                setSaveStatus('offline');
+            }
+        }
+
+        async function deleteTopicDoc(topicId) {
+            setSaveStatus('saving');
+            appTopics = appTopics.filter(t => t.id !== topicId);
+            safeStorage.set(LS_KEYS.TOPICS, appTopics);
+
+            if (useFirebase && fbUser) {
+                try {
+                    await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'vf_topics', topicId));
+                    setSaveStatus('saved');
+                } catch (e) {
+                    setSaveStatus('offline');
+                }
+            } else {
+                setSaveStatus('offline');
+            }
+        }
+
+        async function saveProgressDoc(topicId, statusesObj) {
+            if (!currentUser || !topicId) return;
+            setSaveStatus('saving');
+            const key = `${currentUser.id}_${topicId}`;
+            appProgress[key] = { ...statusesObj };
+            safeStorage.set(LS_KEYS.PROGRESS, appProgress);
+
+            if (useFirebase && fbUser) {
+                try {
+                    await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'vf_progress', key), {
+                        userId: currentUser.id,
+                        topicId,
+                        statuses: statusesObj,
+                        updatedAt: new Date().toISOString()
+                    });
+                    setSaveStatus('saved');
+                } catch (e) {
+                    setSaveStatus('offline');
+                }
+            } else {
+                setSaveStatus('offline');
+            }
+        }
+
+        // ============================================================
+        // 2B. BACKUP (EXPORT JSON) & RESTORE (IMPORT JSON)
+        // ============================================================
+        window.exportBackupJson = function() {
+            if (!currentUser) return;
+            const myTopics = appTopics.filter(t => t.ownerId === currentUser.id);
+            const myProgress = {};
+            Object.keys(appProgress).forEach(k => {
+                if (k.startsWith(currentUser.id + '_')) {
+                    myProgress[k] = appProgress[k];
+                }
+            });
+
+            const payload = {
+                app: 'VocaFlow',
+                version: '2.1',
+                exportedAt: new Date().toISOString(),
+                exportedBy: currentUser.displayName,
+                topics: myTopics,
+                progress: myProgress
+            };
+
+            const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            const dateStr = new Date().toISOString().slice(0, 10);
+            a.href = url;
+            a.download = `VocaFlow_Backup_${currentUser.username}_${dateStr}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            showToast(`Đã xuất sao lưu ${myTopics.length} chủ đề ra tệp .json!`, 'success');
+        };
+
+        window.triggerImportBackup = function() {
+            const input = document.getElementById('import-json-input');
+            input.value = '';
+            input.click();
+        };
+
+        window.handleImportBackupJson = async function(e) {
+            const file = e.target.files?.[0];
+            if (!file || !currentUser) return;
+
+            try {
+                const text = await file.text();
+                const data = JSON.parse(text);
+                const importedTopics = Array.isArray(data.topics) ? data.topics : (Array.isArray(data) ? data : null);
+
+                if (!importedTopics) {
+                    showToast('Tệp .json không đúng định dạng sao lưu của VocaFlow!', 'error');
+                    return;
+                }
+
+                let addedCount = 0;
+                for (const rawTopic of importedTopics) {
+                    if (!rawTopic.title) continue;
+                    const restoredTopic = {
+                        id: 'topic_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
+                        title: rawTopic.title,
+                        description: rawTopic.description || '',
+                        ownerId: currentUser.id,
+                        ownerName: currentUser.displayName,
+                        isPublic: !!rawTopic.isPublic,
+                        shareCode: 'VOC-' + Math.random().toString(36).substring(2, 6).toUpperCase(),
+                        createdAt: rawTopic.createdAt || new Date().toISOString(),
+                        words: Array.isArray(rawTopic.words) ? rawTopic.words.map(w => ({
+                            id: 'w_' + Math.random().toString(36).slice(2, 8),
+                            en: w.en || '',
+                            vi: w.vi || '',
+                            phonetic: w.phonetic || '',
+                            audio: w.audio || ''
+                        })).filter(w => w.en && w.vi) : []
+                    };
+                    await saveTopicDoc(restoredTopic);
+                    addedCount++;
+                }
+
+                if (data.progress && typeof data.progress === 'object') {
+                    appProgress = { ...appProgress, ...data.progress };
+                    safeStorage.set(LS_KEYS.PROGRESS, appProgress);
+                }
+
+                refreshCurrentView();
+                showToast(`Đã khôi phục thành công ${addedCount} chủ đề từ tệp sao lưu!`, 'success');
+            } catch (err) {
+                console.error('Import JSON error:', err);
+                showToast('Không thể đọc tệp .json. Vui lòng kiểm tra lại tệp!', 'error');
+            }
+        };
+
+        // ============================================================
+        // 3. AUTHENTICATION UI & HANDLERS
+        // ============================================================
+        function showAuthScreen() {
+            const shell = document.getElementById('app-shell');
+            shell.classList.add('hidden');
+            shell.classList.remove('flex');
+            document.getElementById('auth-screen').classList.remove('hidden');
+            switchAuthTab('login');
+        }
+
+        window.switchAuthTab = function(tab) {
+            const loginForm = document.getElementById('login-form');
+            const regForm = document.getElementById('register-form');
+            const loginBtn = document.getElementById('tab-login-btn');
+            const regBtn = document.getElementById('tab-register-btn');
+
+            const activeCls = 'flex-1 py-2.5 text-sm font-semibold rounded-lg transition-all bg-white text-brand-600 shadow-sm';
+            const inactiveCls = 'flex-1 py-2.5 text-sm font-semibold rounded-lg transition-all text-slate-500 hover:text-slate-700';
+
+            if (tab === 'register') {
+                loginForm.classList.add('hidden');
+                regForm.classList.remove('hidden');
+                loginBtn.className = inactiveCls;
+                regBtn.className = activeCls;
+            } else {
+                regForm.classList.add('hidden');
+                loginForm.classList.remove('hidden');
+                loginBtn.className = activeCls;
+                regBtn.className = inactiveCls;
+            }
+        };
+
+        window.handleLogin = function(e) {
+            e.preventDefault();
+            const username = document.getElementById('login-username').value.trim().toLowerCase();
+            const password = document.getElementById('login-password').value;
+
+            const found = appUsers.find(u => u.username.toLowerCase() === username && u.password === password);
+            if (!found) {
+                showToast('Sai tên đăng nhập hoặc mật khẩu!', 'error');
+                return;
+            }
+            if (found.locked) {
+                showToast('Tài khoản này đang bị khóa bởi quản trị viên.', 'error');
+                return;
+            }
+
+            currentUser = found;
+            safeStorage.set(LS_KEYS.SESSION, currentUser.id);
+            enterMainApp();
+            showToast(`Chào mừng ${currentUser.displayName} quay trở lại!`, 'success');
+        };
+
+        window.handleRegister = async function(e) {
+            e.preventDefault();
+            const displayName = document.getElementById('reg-displayname').value.trim();
+            const username = document.getElementById('reg-username').value.trim().toLowerCase();
+            const password = document.getElementById('reg-password').value;
+
+            if (appUsers.some(u => u.username.toLowerCase() === username)) {
+                showToast('Tên đăng nhập này đã tồn tại!', 'error');
+                return;
+            }
+
+            const newUser = {
+                id: 'user_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+                username,
+                displayName,
+                password,
+                role: 'user',
+                locked: false,
+                createdAt: new Date().toISOString()
+            };
+
+            await saveUserDoc(newUser);
+            currentUser = newUser;
+            safeStorage.set(LS_KEYS.SESSION, currentUser.id);
+            document.getElementById('register-form').reset();
+            enterMainApp();
+            showToast('Đăng ký tài khoản thành công!', 'success');
+        };
+
+        window.handleLogout = function() {
+            currentUser = null;
+            currentTopicId = null;
+            safeStorage.remove(LS_KEYS.SESSION);
+            document.getElementById('login-form').reset();
+            showAuthScreen();
+        };
+
+        function enterMainApp() {
+            document.getElementById('auth-screen').classList.add('hidden');
+            const shell = document.getElementById('app-shell');
+            shell.classList.remove('hidden');
+            shell.classList.add('flex');
+            updateNavbarUser();
+
+            // Check if URL has ?share=CODE
+            const params = new URLSearchParams(window.location.search);
+            const shareParam = params.get('share');
+            if (shareParam) {
+                const matched = appTopics.find(t => (t.shareCode || '').toUpperCase() === shareParam.toUpperCase());
+                if (matched) {
+                    navigateTo('community');
+                    openTopicDetail(matched.id);
+                    return;
+                }
+            }
+            navigateTo(currentUser.role === 'admin' ? 'admin' : 'my-topics');
+        }
+
+        function updateNavbarUser() {
+            if (!currentUser) return;
+            document.getElementById('user-display-name').textContent = currentUser.displayName;
+            document.getElementById('user-avatar').textContent = currentUser.displayName.charAt(0).toUpperCase();
+            const roleBadge = document.getElementById('user-role-badge');
+            const isAdmin = currentUser.role === 'admin';
+            roleBadge.textContent = isAdmin ? 'Quản trị viên' : 'Học viên';
+            roleBadge.className = isAdmin ? 'text-[10px] font-bold text-indigo-600' : 'text-[10px] font-semibold text-brand-600';
+
+            // Quản trị viên không có mục "Chủ đề của tôi" mà chỉ quản trị & xem Cộng đồng
+            document.getElementById('nav-my-topics').classList.toggle('hidden', isAdmin);
+            document.getElementById('mnav-my-topics').classList.toggle('hidden', isAdmin);
+            document.getElementById('nav-admin').classList.toggle('hidden', !isAdmin);
+            document.getElementById('mnav-admin').classList.toggle('hidden', !isAdmin);
+        }
+
+        // ============================================================
+        // 4. NAVIGATION
+        // ============================================================
+        window.goHome = function() {
+            navigateTo(currentUser?.role === 'admin' ? 'admin' : 'my-topics');
+        };
+
+        window.navigateTo = function(viewName) {
+            if (viewName === 'admin' && currentUser?.role !== 'admin') {
+                showToast('Bạn không có quyền truy cập trang Quản trị.', 'error');
+                return;
+            }
+            if (viewName === 'my-topics' && currentUser?.role === 'admin') {
+                viewName = 'admin';
+            }
+            if (viewName === 'my-topics' || viewName === 'community' || viewName === 'admin') {
+                previousView = viewName;
+            }
+            currentView = viewName;
+
+            document.querySelectorAll('.app-view').forEach(v => v.classList.add('hidden'));
+            const target = document.getElementById('view-' + viewName);
+            if (target) target.classList.remove('hidden');
+
+            // Active styles for desktop & mobile nav
+            document.querySelectorAll('.nav-btn').forEach(btn => {
+                btn.classList.remove('bg-white', 'text-brand-600', 'shadow-sm');
+                btn.classList.add('text-slate-600', 'hover:text-slate-900');
+            });
+            const activeDesktop = document.getElementById('nav-' + viewName);
+            if (activeDesktop) {
+                activeDesktop.classList.add('bg-white', 'text-brand-600', 'shadow-sm');
+                activeDesktop.classList.remove('text-slate-600', 'hover:text-slate-900');
+            }
+
+            document.querySelectorAll('.mnav-btn').forEach(btn => {
+                btn.classList.remove('bg-brand-50', 'text-brand-600');
+                btn.classList.add('text-slate-500');
+            });
+            const activeMobile = document.getElementById('mnav-' + viewName);
+            if (activeMobile) {
+                activeMobile.classList.add('bg-brand-50', 'text-brand-600');
+                activeMobile.classList.remove('text-slate-500');
+            }
+
+            refreshCurrentView();
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        };
+
+        function refreshCurrentView() {
+            if (!currentUser) return;
+            if (currentView === 'my-topics') renderMyTopics();
+            else if (currentView === 'community') renderCommunityTopics();
+            else if (currentView === 'topic-detail' && currentTopicId) renderTopicDetail(currentTopicId);
+            else if (currentView === 'admin') renderAdminDashboard();
+        }
+
+        window.goBackFromDetail = function() {
+            navigateTo(previousView || (currentUser?.role === 'admin' ? 'admin' : 'my-topics'));
+        };
+
+        // ============================================================
+        // 5. MY TOPICS & COMMUNITY VIEWS
+        // ============================================================
+        window.renderMyTopics = function() {
+            const grid = document.getElementById('my-topics-grid');
+            const query = (document.getElementById('my-topics-search').value || '').toLowerCase().trim();
+            const myTopics = appTopics.filter(t => t.ownerId === currentUser.id &&
+                (t.title.toLowerCase().includes(query) || (t.description || '').toLowerCase().includes(query))
+            );
+
+            if (myTopics.length === 0) {
+                grid.innerHTML = `
+                    <div class="col-span-full bg-white rounded-3xl p-10 border border-dashed border-slate-300 text-center">
+                        <div class="w-14 h-14 rounded-2xl bg-brand-50 text-brand-500 flex items-center justify-center text-2xl mx-auto mb-3">
+                            <i class="fa-solid fa-folder-plus"></i>
+                        </div>
+                        <h3 class="text-base font-bold text-slate-800">Chưa có chủ đề nào</h3>
+                        <p class="text-sm text-slate-500 mt-1 mb-4">Hãy tạo bộ từ vựng đầu tiên hoặc sao chép từ mục Cộng đồng!</p>
+                        <button onclick="openTopicModal()" class="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold rounded-xl">
+                            <i class="fa-solid fa-plus mr-1"></i> Tạo chủ đề ngay
+                        </button>
+                    </div>`;
+                return;
+            }
+
+            grid.innerHTML = myTopics.map(t => buildTopicCard(t, true)).join('');
+        };
+
+        window.renderCommunityTopics = function() {
+            const grid = document.getElementById('community-grid');
+            const query = (document.getElementById('community-search').value || '').toLowerCase().trim();
+            const publicTopics = appTopics.filter(t => t.isPublic &&
+                (t.title.toLowerCase().includes(query) ||
+                 (t.description || '').toLowerCase().includes(query) ||
+                 (t.ownerName || '').toLowerCase().includes(query))
+            );
+
+            if (publicTopics.length === 0) {
+                grid.innerHTML = `
+                    <div class="col-span-full bg-white rounded-3xl p-10 border border-dashed border-slate-300 text-center">
+                        <p class="text-sm text-slate-500">Không tìm thấy chủ đề công khai nào phù hợp.</p>
+                    </div>`;
+                return;
+            }
+
+            grid.innerHTML = publicTopics.map(t => buildTopicCard(t, false)).join('');
+        };
+
+        function buildTopicCard(topic, isOwnerView) {
+            const wordCount = (topic.words || []).length;
+            const isMine = topic.ownerId === currentUser.id;
+            const visibilityBadge = topic.isPublic
+                ? `<span class="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200/70"><i class="fa-solid fa-globe mr-1"></i>Công khai</span>`
+                : `<span class="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-slate-100 text-slate-600"><i class="fa-solid fa-lock mr-1"></i>Riêng tư</span>`;
+
+            return `
+                <div class="bg-white rounded-3xl p-5 border border-slate-200/80 shadow-sm hover:shadow-md hover:border-brand-200 transition-all flex flex-col justify-between group">
+                    <div>
+                        <div class="flex items-center justify-between gap-2 mb-3">
+                            ${visibilityBadge}
+                            <span class="text-[11px] font-mono font-semibold text-slate-400 bg-slate-50 px-2 py-0.5 rounded-lg border border-slate-100">${escapeHtml(topic.shareCode || '')}</span>
+                        </div>
+                        <h3 onclick="openTopicDetail('${topic.id}')" class="text-lg font-extrabold text-slate-900 group-hover:text-brand-600 transition-colors cursor-pointer line-clamp-1">
+                            ${escapeHtml(topic.title)}
+                        </h3>
+                        <p class="text-xs text-slate-500 mt-1.5 line-clamp-2 min-h-[2rem]">${escapeHtml(topic.description || 'Chưa có mô tả cho chủ đề này.')}</p>
+                        <div class="flex items-center justify-between text-xs text-slate-500 mt-4 pt-3 border-t border-slate-100">
+                            <span class="font-semibold text-brand-700"><i class="fa-solid fa-layer-group mr-1"></i>${wordCount} từ vựng</span>
+                            <span class="truncate max-w-[140px]"><i class="fa-regular fa-user mr-1"></i>${escapeHtml(topic.ownerName || 'Ẩn danh')}</span>
+                        </div>
+                    </div>
+
+                    <div class="mt-4 pt-3 border-t border-slate-100 flex flex-wrap gap-2">
+                        <button onclick="startFlashcard('${topic.id}')" class="flex-1 py-2 px-3 bg-brand-600 hover:bg-brand-700 text-white text-xs font-semibold rounded-xl transition-all flex items-center justify-center gap-1.5">
+                            <i class="fa-solid fa-clone"></i> Flashcard
+                        </button>
+                        <button onclick="startTyping('${topic.id}')" class="flex-1 py-2 px-3 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-xl transition-all flex items-center justify-center gap-1.5">
+                            <i class="fa-solid fa-keyboard"></i> Luyện gõ
+                        </button>
+                        <button onclick="openTopicDetail('${topic.id}')" title="Xem & quản lý từ vựng" class="py-2 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-xl transition-all">
+                            <i class="fa-solid fa-list"></i>
+                        </button>
+                        ${isOwnerView || isMine ? `
+                            <button onclick="openShareModal('${topic.id}')" title="Chia sẻ" class="py-2 px-3 bg-brand-50 hover:bg-brand-100 text-brand-600 text-xs font-semibold rounded-xl transition-all">
+                                <i class="fa-solid fa-share-nodes"></i>
+                            </button>
+                            <button onclick="confirmDeleteTopic('${topic.id}')" title="Xóa chủ đề" class="py-2 px-3 bg-rose-50 hover:bg-rose-100 text-rose-600 text-xs font-semibold rounded-xl transition-all">
+                                <i class="fa-solid fa-trash"></i>
+                            </button>
+                        ` : (currentUser.role === 'admin' ? `
+                            <button onclick="confirmDeleteTopic('${topic.id}')" title="Xóa chủ đề (Quản trị)" class="py-2 px-3 bg-rose-50 hover:bg-rose-100 text-rose-600 text-xs font-semibold rounded-xl transition-all">
+                                <i class="fa-solid fa-trash"></i>
+                            </button>
+                        ` : `
+                            <button onclick="cloneTopic('${topic.id}')" title="Lưu bản sao về tài khoản của bạn" class="py-2 px-3 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 text-xs font-semibold rounded-xl transition-all">
+                                <i class="fa-solid fa-copy"></i>
+                            </button>
+                        `)}
+                    </div>
+                </div>
+            `;
+        }
+
+        window.handleOpenByShareCode = function(e) {
+            e.preventDefault();
+            const code = document.getElementById('share-code-input').value.trim().toUpperCase();
+            if (!code) return;
+            const found = appTopics.find(t => (t.shareCode || '').toUpperCase() === code);
+            if (!found) {
+                showToast(`Không tìm thấy chủ đề nào với mã "${code}".`, 'error');
+                return;
+            }
+            document.getElementById('share-code-input').value = '';
+            openTopicDetail(found.id);
+            showToast(`Đã mở chủ đề "${found.title}"!`, 'success');
+        };
+
+        // ============================================================
+        // 6. TOPIC CRUD, DETAIL & WORD MANAGEMENT
+        // ============================================================
+        window.openTopicModal = function(topicId = null) {
+            if (!topicId && currentUser?.role === 'admin') {
+                showToast('Quản trị viên không tạo chủ đề mới. Chủ đề chỉ dành cho tài khoản thường tạo!', 'info');
+                return;
+            }
+            const modal = document.getElementById('topic-modal');
+            const titleEl = document.getElementById('topic-modal-title');
+            document.getElementById('topic-modal-id').value = topicId || '';
+
+            if (topicId) {
+                const topic = appTopics.find(t => t.id === topicId);
+                if (!topic) return;
+                titleEl.textContent = 'Chỉnh sửa chủ đề';
+                document.getElementById('topic-modal-name').value = topic.title;
+                document.getElementById('topic-modal-desc').value = topic.description || '';
+                document.getElementById('topic-modal-public').checked = !!topic.isPublic;
+            } else {
+                titleEl.textContent = 'Tạo chủ đề mới';
+                document.getElementById('topic-modal-name').value = '';
+                document.getElementById('topic-modal-desc').value = '';
+                document.getElementById('topic-modal-public').checked = false;
+            }
+            modal.classList.remove('hidden');
+        };
+
+        window.handleSaveTopic = async function(e) {
+            e.preventDefault();
+            const id = document.getElementById('topic-modal-id').value;
+            if (!id && currentUser?.role === 'admin') {
+                showToast('Quản trị viên không tạo chủ đề mới!', 'error');
+                closeModal('topic-modal');
+                return;
+            }
+            const title = document.getElementById('topic-modal-name').value.trim();
+            const description = document.getElementById('topic-modal-desc').value.trim();
+            const isPublic = document.getElementById('topic-modal-public').checked;
+
+            if (id) {
+                const existing = appTopics.find(t => t.id === id);
+                if (!existing) return;
+                const updated = { ...existing, title, description, isPublic };
+                await saveTopicDoc(updated);
+                showToast('Đã cập nhật thông tin chủ đề!', 'success');
+            } else {
+                const newTopic = {
+                    id: 'topic_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+                    title,
+                    description,
+                    ownerId: currentUser.id,
+                    ownerName: currentUser.displayName,
+                    isPublic,
+                    shareCode: 'VOC-' + Math.random().toString(36).substring(2, 6).toUpperCase(),
+                    createdAt: new Date().toISOString(),
+                    words: []
+                };
+                await saveTopicDoc(newTopic);
+                showToast('Đã tạo chủ đề mới! Hãy thêm từ vựng nhé.', 'success');
+                closeModal('topic-modal');
+                openTopicDetail(newTopic.id);
+                return;
+            }
+
+            closeModal('topic-modal');
+            refreshCurrentView();
+        };
+
+        window.confirmDeleteTopic = function(topicId) {
+            const topic = appTopics.find(t => t.id === topicId);
+            if (!topic) return;
+            openConfirmModal(
+                'Xóa chủ đề?',
+                `Bạn có chắc chắn muốn xóa chủ đề "${topic.title}" cùng toàn bộ từ vựng bên trong?`,
+                async () => {
+                    await deleteTopicDoc(topicId);
+                    showToast('Đã xóa chủ đề thành công.', 'success');
+                    if (currentView === 'topic-detail' && currentTopicId === topicId) {
+                        navigateTo('my-topics');
+                    } else {
+                        refreshCurrentView();
+                    }
+                }
+            );
+        };
+
+        window.cloneTopic = async function(topicId) {
+            if (currentUser?.role === 'admin') {
+                showToast('Quản trị viên không sao chép chủ đề về tài khoản quản trị.', 'info');
+                return;
+            }
+            const original = appTopics.find(t => t.id === topicId);
+            if (!original) return;
+            const cloned = {
+                id: 'topic_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+                title: original.title + ' (Bản sao)',
+                description: original.description || '',
+                ownerId: currentUser.id,
+                ownerName: currentUser.displayName,
+                isPublic: false,
+                shareCode: 'VOC-' + Math.random().toString(36).substring(2, 6).toUpperCase(),
+                createdAt: new Date().toISOString(),
+                words: (original.words || []).map(w => ({ ...w, id: 'w_' + Math.random().toString(36).slice(2, 8) }))
+            };
+            await saveTopicDoc(cloned);
+            showToast('Đã sao chép chủ đề về mục "Chủ đề của tôi"!', 'success');
+            navigateTo('my-topics');
+        };
+
+        window.openTopicDetail = function(topicId) {
+            currentTopicId = topicId;
+            navigateTo('topic-detail');
+        };
+
+        function renderTopicDetail(topicId) {
+            const topic = appTopics.find(t => t.id === topicId);
+            if (!topic) {
+                navigateTo('my-topics');
+                return;
+            }
+
+            const canEdit = topic.ownerId === currentUser.id || currentUser.role === 'admin';
+
+            document.getElementById('detail-title').textContent = topic.title;
+            document.getElementById('detail-desc').textContent = topic.description || 'Chưa có mô tả.';
+            document.getElementById('detail-code-badge').textContent = 'Mã: ' + (topic.shareCode || '');
+            document.getElementById('detail-author-badge').innerHTML = `<i class="fa-regular fa-user mr-1"></i>Tác giả: ${escapeHtml(topic.ownerName || 'Ẩn danh')}`;
+
+            const visBadge = document.getElementById('detail-visibility-badge');
+            if (topic.isPublic) {
+                visBadge.className = 'px-2.5 py-1 rounded-lg text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200';
+                visBadge.innerHTML = '<i class="fa-solid fa-globe mr-1"></i>Công khai';
+            } else {
+                visBadge.className = 'px-2.5 py-1 rounded-lg text-xs font-bold bg-slate-100 text-slate-600';
+                visBadge.innerHTML = '<i class="fa-solid fa-lock mr-1"></i>Riêng tư';
+            }
+
+            document.getElementById('add-word-panel').classList.toggle('hidden', !canEdit);
+            document.getElementById('detail-edit-topic-btn').classList.toggle('hidden', !canEdit);
+            document.getElementById('detail-share-btn').classList.toggle('hidden', !canEdit);
+            document.getElementById('detail-clone-btn').classList.toggle('hidden', topic.ownerId === currentUser.id || currentUser.role === 'admin');
+
+            const words = topic.words || [];
+            document.getElementById('detail-word-count').textContent = words.length;
+
+            // Show bulk IPA button if user can edit and at least one word is missing phonetic
+            const missingIpaCount = words.filter(w => !w.phonetic || !w.phonetic.trim()).length;
+            const bulkBtn = document.getElementById('btn-bulk-ipa');
+            const bulkText = document.getElementById('btn-bulk-ipa-text');
+            if (canEdit && missingIpaCount > 0) {
+                bulkBtn.classList.remove('hidden');
+                bulkText.textContent = `Tự động điền IPA cho ${missingIpaCount} từ còn thiếu`;
+            } else {
+                bulkBtn.classList.add('hidden');
+            }
+
+            const listEl = document.getElementById('detail-words-list');
+
+            if (words.length === 0) {
+                listEl.innerHTML = `<div class="p-8 text-center text-sm text-slate-400">Chủ đề này chưa có từ vựng nào. Hãy thêm từ ở khung phía trên!</div>`;
+                return;
+            }
+
+            listEl.innerHTML = words.map((w, idx) => `
+                <div class="px-6 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-slate-50/80 transition-colors">
+                    <div class="flex items-start gap-3.5">
+                        <span class="w-7 h-7 rounded-lg bg-brand-50 text-brand-600 text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">${idx + 1}</span>
+                        <div>
+                            <div class="flex flex-wrap items-center gap-2">
+                                <span class="font-bold text-slate-900 text-base">${escapeHtml(w.en)}</span>
+                                ${w.phonetic ? `<span class="text-xs font-mono text-brand-700 bg-brand-50/80 px-2 py-0.5 rounded-md">${escapeHtml(w.phonetic)}</span>` : ''}
+                                <button onclick="speakWordById('${w.id}')" class="w-7 h-7 rounded-full hover:bg-brand-100 ${w.audio ? 'text-emerald-600 bg-emerald-50' : 'text-brand-600'} flex items-center justify-center transition-all" title="${w.audio ? 'Phát âm chuẩn bản xứ (Audio)' : 'Phát âm (Speech API)'}">
+                                    <i class="fa-solid fa-volume-high text-xs"></i>
+                                </button>
+                            </div>
+                            <div class="text-sm text-slate-600 mt-0.5">${escapeHtml(w.vi)}</div>
+                        </div>
+                    </div>
+                    ${canEdit ? `
+                        <div class="flex items-center gap-1.5 self-end sm:self-center">
+                            <button onclick="openEditWordModal('${w.id}')" class="p-2 rounded-lg text-slate-400 hover:text-brand-600 hover:bg-brand-50 transition-all" title="Sửa từ">
+                                <i class="fa-solid fa-pen text-xs"></i>
+                            </button>
+                            <button onclick="deleteWord('${w.id}')" class="p-2 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-all" title="Xóa từ">
+                                <i class="fa-solid fa-trash text-xs"></i>
+                            </button>
+                        </div>
+                    ` : ''}
+                </div>
+            `).join('');
+        }
+
+        // ============================================================
+        // 6B. FREE DICTIONARY API (AUTO IPA & NATIVE AUDIO)
+        // ============================================================
+        async function lookupDictionaryIPA(rawWord) {
+            const cleaned = (rawWord || '').trim().toLowerCase();
+            if (!cleaned) return { found: false, reason: 'empty' };
+
+            try {
+                const res = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(cleaned)}`);
+                if (!res.ok) {
+                    return { found: false, reason: 'not_found' };
+                }
+                const data = await res.json();
+                if (!Array.isArray(data) || data.length === 0) {
+                    return { found: false, reason: 'not_found' };
+                }
+
+                let phonetic = '';
+                let audio = '';
+
+                for (const entry of data) {
+                    if (!phonetic && entry.phonetic) {
+                        phonetic = entry.phonetic;
+                    }
+                    if (Array.isArray(entry.phonetics)) {
+                        for (const p of entry.phonetics) {
+                            if (!phonetic && p.text) phonetic = p.text;
+                            if (!audio && p.audio) audio = p.audio;
+                        }
+                    }
+                    if (phonetic && audio) break;
+                }
+
+                if (phonetic || audio) {
+                    return { found: true, phonetic, audio };
+                }
+                return { found: false, reason: 'no_ipa' };
+            } catch (err) {
+                console.warn('Dictionary API error:', err);
+                return { found: false, reason: 'network' };
+            }
+        }
+
+        function setIpaStatusUI(elId, type, message) {
+            const el = document.getElementById(elId);
+            if (!el) return;
+            if (!type) {
+                el.classList.add('hidden');
+                return;
+            }
+            el.classList.remove('hidden');
+            if (type === 'loading') {
+                el.className = 'mt-2.5 text-xs font-medium flex items-center gap-1.5 text-brand-600';
+                el.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i><span>${escapeHtml(message)}</span>`;
+            } else if (type === 'success') {
+                el.className = 'mt-2.5 text-xs font-medium flex items-center gap-1.5 text-emerald-600';
+                el.innerHTML = `<i class="fa-solid fa-circle-check"></i><span>${escapeHtml(message)}</span>`;
+            } else {
+                el.className = 'mt-2.5 text-xs font-medium flex items-center gap-1.5 text-amber-600';
+                el.innerHTML = `<i class="fa-solid fa-circle-info"></i><span>${escapeHtml(message)}</span>`;
+            }
+        }
+
+        window.onNewWordInput = function() {
+            clearTimeout(newWordDebounceTimer);
+            const word = document.getElementById('new-word-en').value.trim();
+            document.getElementById('new-word-audio').value = '';
+            if (!word) {
+                setIpaStatusUI('new-ipa-status', null);
+                return;
+            }
+            newWordDebounceTimer = setTimeout(() => {
+                fetchNewWordIPA(true);
+            }, 600);
+        };
+
+        window.fetchNewWordIPA = async function(isAuto = false) {
+            const word = document.getElementById('new-word-en').value.trim();
+            if (!word) {
+                if (!isAuto) showToast('Vui lòng nhập từ tiếng Anh trước khi lấy IPA!', 'info');
+                return;
+            }
+            setIpaStatusUI('new-ipa-status', 'loading', `Đang tra phiên âm IPA cho "${word}"...`);
+            const result = await lookupDictionaryIPA(word);
+
+            // Ensure input hasn't changed while fetching
+            if (document.getElementById('new-word-en').value.trim() !== word) return;
+
+            if (result.found) {
+                if (result.phonetic) document.getElementById('new-word-phonetic').value = result.phonetic;
+                document.getElementById('new-word-audio').value = result.audio || '';
+                const msg = result.audio
+                    ? `Đã tìm thấy phiên âm ${result.phonetic || ''} kèm âm thanh chuẩn!`
+                    : `Đã tìm thấy phiên âm ${result.phonetic}!`;
+                setIpaStatusUI('new-ipa-status', 'success', msg);
+            } else {
+                document.getElementById('new-word-audio').value = '';
+                setIpaStatusUI('new-ipa-status', 'warn', `Không có trong từ điển (có thể là cụm từ hoặc tên riêng) — bạn có thể tự gõ phiên âm.`);
+            }
+        };
+
+        window.onEditWordInput = function() {
+            clearTimeout(editWordDebounceTimer);
+            const word = document.getElementById('edit-word-en').value.trim();
+            if (!word) {
+                setIpaStatusUI('edit-ipa-status', null);
+                return;
+            }
+            editWordDebounceTimer = setTimeout(() => {
+                fetchEditWordIPA(true);
+            }, 600);
+        };
+
+        window.fetchEditWordIPA = async function(isAuto = false) {
+            const word = document.getElementById('edit-word-en').value.trim();
+            if (!word) {
+                if (!isAuto) showToast('Vui lòng nhập từ tiếng Anh!', 'info');
+                return;
+            }
+            setIpaStatusUI('edit-ipa-status', 'loading', `Đang tra phiên âm cho "${word}"...`);
+            const result = await lookupDictionaryIPA(word);
+            if (document.getElementById('edit-word-en').value.trim() !== word) return;
+
+            if (result.found) {
+                if (result.phonetic) document.getElementById('edit-word-phonetic').value = result.phonetic;
+                document.getElementById('edit-word-audio').value = result.audio || '';
+                setIpaStatusUI('edit-ipa-status', 'success', `Đã cập nhật phiên âm ${result.phonetic || ''}${result.audio ? ' & âm thanh chuẩn' : ''}!`);
+            } else {
+                setIpaStatusUI('edit-ipa-status', 'warn', 'Không tìm thấy trong từ điển — bạn vẫn có thể tự nhập phiên âm.');
+            }
+        };
+
+        window.bulkFillMissingIPA = async function() {
+            const topic = appTopics.find(t => t.id === currentTopicId);
+            if (!topic || !topic.words) return;
+
+            const btn = document.getElementById('btn-bulk-ipa');
+            const btnText = document.getElementById('btn-bulk-ipa-text');
+            const missingIndices = topic.words
+                .map((w, idx) => (!w.phonetic || !w.phonetic.trim()) ? idx : -1)
+                .filter(idx => idx !== -1);
+
+            if (missingIndices.length === 0) {
+                showToast('Tất cả các từ trong chủ đề đều đã có phiên âm!', 'info');
+                return;
+            }
+
+            btn.disabled = true;
+            btn.classList.add('opacity-70', 'cursor-wait');
+
+            const updatedWords = [...topic.words];
+            let filledCount = 0;
+
+            for (let i = 0; i < missingIndices.length; i++) {
+                const idx = missingIndices[i];
+                const w = updatedWords[idx];
+                btnText.textContent = `Đang tra cứu ${i + 1}/${missingIndices.length}...`;
+                const res = await lookupDictionaryIPA(w.en);
+                if (res.found && (res.phonetic || res.audio)) {
+                    updatedWords[idx] = {
+                        ...w,
+                        phonetic: res.phonetic || w.phonetic || '',
+                        audio: res.audio || w.audio || ''
+                    };
+                    if (res.phonetic) filledCount++;
+                }
+            }
+
+            await saveTopicDoc({ ...topic, words: updatedWords });
+            btn.disabled = false;
+            btn.classList.remove('opacity-70', 'cursor-wait');
+            renderTopicDetail(currentTopicId);
+
+            if (filledCount > 0) {
+                showToast(`Đã tự động điền phiên âm IPA cho ${filledCount}/${missingIndices.length} từ!`, 'success');
+            } else {
+                showToast('Không tìm thấy thêm phiên âm phù hợp cho các từ còn thiếu.', 'info');
+            }
+        };
+
+        window.handleAddWord = async function(e) {
+            e.preventDefault();
+            const topic = appTopics.find(t => t.id === currentTopicId);
+            if (!topic) return;
+
+            const en = document.getElementById('new-word-en').value.trim();
+            const vi = document.getElementById('new-word-vi').value.trim();
+            const phonetic = document.getElementById('new-word-phonetic').value.trim();
+            const audio = document.getElementById('new-word-audio').value.trim();
+
+            const newWord = {
+                id: 'w_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+                en,
+                vi,
+                phonetic,
+                audio
+            };
+
+            const updated = { ...topic, words: [...(topic.words || []), newWord] };
+            await saveTopicDoc(updated);
+
+            document.getElementById('new-word-en').value = '';
+            document.getElementById('new-word-vi').value = '';
+            document.getElementById('new-word-phonetic').value = '';
+            document.getElementById('new-word-audio').value = '';
+            setIpaStatusUI('new-ipa-status', null);
+            document.getElementById('new-word-en').focus();
+
+            renderTopicDetail(currentTopicId);
+            showToast(`Đã thêm từ "${en}"!`, 'success');
+        };
+
+        window.openEditWordModal = function(wordId) {
+            const topic = appTopics.find(t => t.id === currentTopicId);
+            const word = (topic?.words || []).find(w => w.id === wordId);
+            if (!word) return;
+
+            document.getElementById('edit-word-id').value = word.id;
+            document.getElementById('edit-word-en').value = word.en;
+            document.getElementById('edit-word-vi').value = word.vi;
+            document.getElementById('edit-word-phonetic').value = word.phonetic || '';
+            document.getElementById('edit-word-audio').value = word.audio || '';
+            setIpaStatusUI('edit-ipa-status', null);
+            document.getElementById('word-modal').classList.remove('hidden');
+        };
+
+        window.handleUpdateWord = async function(e) {
+            e.preventDefault();
+            const topic = appTopics.find(t => t.id === currentTopicId);
+            if (!topic) return;
+
+            const wordId = document.getElementById('edit-word-id').value;
+            const en = document.getElementById('edit-word-en').value.trim();
+            const vi = document.getElementById('edit-word-vi').value.trim();
+            const phonetic = document.getElementById('edit-word-phonetic').value.trim();
+            const audio = document.getElementById('edit-word-audio').value.trim();
+
+            const updatedWords = (topic.words || []).map(w => w.id === wordId ? { ...w, en, vi, phonetic, audio } : w);
+            await saveTopicDoc({ ...topic, words: updatedWords });
+            closeModal('word-modal');
+            renderTopicDetail(currentTopicId);
+            showToast('Đã cập nhật từ vựng!', 'success');
+        };
+
+        window.deleteWord = async function(wordId) {
+            const topic = appTopics.find(t => t.id === currentTopicId);
+            if (!topic) return;
+            const updatedWords = (topic.words || []).filter(w => w.id !== wordId);
+            await saveTopicDoc({ ...topic, words: updatedWords });
+            renderTopicDetail(currentTopicId);
+            showToast('Đã xóa từ vựng.', 'info');
+        };
+
+        // ============================================================
+        // 7. SHARE MODAL & CLIPBOARD
+        // ============================================================
+        window.openShareModal = function(topicId) {
+            const topic = appTopics.find(t => t.id === topicId);
+            if (!topic) return;
+            shareModalTopicId = topicId;
+
+            document.getElementById('share-modal-public-toggle').checked = !!topic.isPublic;
+            document.getElementById('share-modal-code').value = topic.shareCode || '';
+            const baseUrl = window.location.origin + window.location.pathname;
+            document.getElementById('share-modal-link').value = `${baseUrl}?share=${topic.shareCode}`;
+            document.getElementById('share-modal').classList.remove('hidden');
+        };
+
+        window.toggleShareModalPublic = async function() {
+            const topic = appTopics.find(t => t.id === shareModalTopicId);
+            if (!topic) return;
+            const isPublic = document.getElementById('share-modal-public-toggle').checked;
+            await saveTopicDoc({ ...topic, isPublic });
+            refreshCurrentView();
+            showToast(isPublic ? 'Đã bật chia sẻ công khai lên Cộng đồng!' : 'Đã chuyển chủ đề sang Riêng tư.', 'success');
+        };
+
+        window.copyShareCode = function() {
+            const code = document.getElementById('share-modal-code').value;
+            copyToClipboard(code);
+            showToast(`Đã sao chép mã chia sẻ: ${code}`, 'success');
+        };
+
+        window.copyShareLink = function() {
+            const link = document.getElementById('share-modal-link').value;
+            copyToClipboard(link);
+            showToast('Đã sao chép đường dẫn chia sẻ!', 'success');
+        };
+
+        function copyToClipboard(text) {
+            const textarea = document.createElement('textarea');
+            textarea.value = text;
+            textarea.style.position = 'fixed';
+            textarea.style.opacity = '0';
+            document.body.appendChild(textarea);
+            textarea.select();
+            try {
+                document.execCommand('copy');
+            } catch (err) {
+                console.error('Copy failed', err);
+            }
+            document.body.removeChild(textarea);
+        }
+
+        // ============================================================
+        // 8. FLASHCARD STUDY MODE (3D FLIP + SPEECH)
+        // ============================================================
+        window.startFlashcard = function(topicId) {
+            const topic = appTopics.find(t => t.id === topicId);
+            if (!topic || !topic.words || topic.words.length === 0) {
+                showToast('Chủ đề này chưa có từ vựng để học Flashcard!', 'error');
+                return;
+            }
+
+            currentTopicId = topicId;
+            const progressKey = currentUser ? `${currentUser.id}_${topicId}` : '';
+            const savedStatuses = (progressKey && appProgress[progressKey]) ? { ...appProgress[progressKey] } : {};
+
+            fcState = {
+                words: [...topic.words],
+                filteredIndices: topic.words.map((_, i) => i),
+                currentIndex: 0,
+                isFlipped: false,
+                direction: 'en-to-vi',
+                statuses: savedStatuses,
+                reviewOnly: false
+            };
+
+            document.getElementById('fc-topic-title').textContent = topic.title;
+            navigateTo('flashcard');
+            renderFlashcard();
+        };
+
+        function renderFlashcard() {
+            const indices = fcState.filteredIndices;
+            if (indices.length === 0) return;
+
+            const word = fcState.words[indices[fcState.currentIndex]];
+            const cardInner = document.getElementById('fc-card-inner');
+            cardInner.classList.toggle('is-flipped', fcState.isFlipped);
+
+            const isEnFirst = fcState.direction === 'en-to-vi';
+            document.getElementById('fc-dir-label').textContent = isEnFirst ? 'Anh → Việt' : 'Việt → Anh';
+
+            // Front Face
+            document.getElementById('fc-front-lang').textContent = isEnFirst ? 'Tiếng Anh' : 'Nghĩa tiếng Việt';
+            document.getElementById('fc-front-text').textContent = isEnFirst ? word.en : word.vi;
+            document.getElementById('fc-front-phonetic').textContent = isEnFirst ? (word.phonetic || '') : '';
+            document.getElementById('fc-front-speak').classList.toggle('hidden', !isEnFirst);
+
+            // Back Face
+            document.getElementById('fc-back-lang').textContent = isEnFirst ? 'Nghĩa tiếng Việt' : 'Tiếng Anh';
+            document.getElementById('fc-back-text').textContent = isEnFirst ? word.vi : word.en;
+            document.getElementById('fc-back-phonetic').textContent = !isEnFirst ? (word.phonetic || '') : '';
+            document.getElementById('fc-back-speak').classList.toggle('hidden', isEnFirst);
+
+            // Status Pill
+            const status = fcState.statuses[word.id];
+            const pill = document.getElementById('fc-status-pill');
+            if (status === 'known') {
+                pill.className = 'absolute top-5 right-6 px-3 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-700';
+                pill.innerHTML = '<i class="fa-solid fa-check mr-1"></i>Đã thuộc';
+            } else if (status === 'review') {
+                pill.className = 'absolute top-5 right-6 px-3 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-700';
+                pill.innerHTML = '<i class="fa-solid fa-rotate-right mr-1"></i>Cần ôn';
+            } else {
+                pill.className = 'hidden';
+            }
+
+            // Progress & Counters
+            const knownCount = Object.values(fcState.statuses).filter(s => s === 'known').length;
+            const reviewCount = Object.values(fcState.statuses).filter(s => s === 'review').length;
+
+            document.getElementById('fc-current-idx').textContent = fcState.currentIndex + 1;
+            document.getElementById('fc-total-count').textContent = indices.length;
+            document.getElementById('fc-known-count').textContent = knownCount;
+            document.getElementById('fc-review-count').textContent = reviewCount;
+
+            const pct = Math.round(((fcState.currentIndex + 1) / indices.length) * 100);
+            document.getElementById('fc-progress-bar').style.width = pct + '%';
+
+            const filterBtn = document.getElementById('fc-filter-review-btn');
+            if (reviewCount > 0 || fcState.reviewOnly) {
+                filterBtn.classList.remove('hidden');
+                filterBtn.textContent = fcState.reviewOnly ? 'Hiện tất cả thẻ' : `Chỉ ôn ${reviewCount} thẻ cần ôn`;
+            } else {
+                filterBtn.classList.add('hidden');
+            }
+        }
+
+        window.flipCard = function() {
+            fcState.isFlipped = !fcState.isFlipped;
+            document.getElementById('fc-card-inner').classList.toggle('is-flipped', fcState.isFlipped);
+        };
+
+        window.nextCard = function() {
+            if (fcState.currentIndex < fcState.filteredIndices.length - 1) {
+                fcState.currentIndex++;
+            } else {
+                fcState.currentIndex = 0;
+                showToast('Đã quay lại thẻ đầu tiên!', 'info');
+            }
+            fcState.isFlipped = false;
+            renderFlashcard();
+        };
+
+        window.prevCard = function() {
+            if (fcState.currentIndex > 0) {
+                fcState.currentIndex--;
+            } else {
+                fcState.currentIndex = fcState.filteredIndices.length - 1;
+            }
+            fcState.isFlipped = false;
+            renderFlashcard();
+        };
+
+        window.toggleFlashcardDirection = function() {
+            fcState.direction = fcState.direction === 'en-to-vi' ? 'vi-to-en' : 'en-to-vi';
+            fcState.isFlipped = false;
+            renderFlashcard();
+        };
+
+        window.shuffleFlashcards = function() {
+            for (let i = fcState.filteredIndices.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [fcState.filteredIndices[i], fcState.filteredIndices[j]] = [fcState.filteredIndices[j], fcState.filteredIndices[i]];
+            }
+            fcState.currentIndex = 0;
+            fcState.isFlipped = false;
+            renderFlashcard();
+            showToast('Đã xáo trộn thứ tự thẻ!', 'info');
+        };
+        window.markCardStatus = async function(status) {
+            const word = fcState.words[fcState.filteredIndices[fcState.currentIndex]];
+            fcState.statuses[word.id] = status;
+            await saveProgressDoc(currentTopicId, fcState.statuses);
+            if (fcState.currentIndex < fcState.filteredIndices.length - 1) {
+                fcState.currentIndex++;
+                fcState.isFlipped = false;
+            }
+            renderFlashcard();
+        };
+
+        window.toggleReviewOnlyFilter = function() {
+            fcState.reviewOnly = !fcState.reviewOnly;
+            if (fcState.reviewOnly) {
+                const reviewIndices = fcState.words
+                    .map((w, i) => fcState.statuses[w.id] === 'review' ? i : -1)
+                    .filter(i => i !== -1);
+                if (reviewIndices.length === 0) {
+                    fcState.reviewOnly = false;
+                    showToast('Không có thẻ nào đánh dấu Cần ôn!', 'info');
+                    return;
+                }
+                fcState.filteredIndices = reviewIndices;
+            } else {
+                fcState.filteredIndices = fcState.words.map((_, i) => i);
+            }
+            fcState.currentIndex = 0;
+            fcState.isFlipped = false;
+            renderFlashcard();
+        };
+
+        window.speakCurrentCard = function(e, face) {
+            e.stopPropagation();
+            const word = fcState.words[fcState.filteredIndices[fcState.currentIndex]];
+            if (word) speakWord(word);
+        };
+
+        // Keyboard shortcuts for Flashcard
+        document.addEventListener('keydown', (e) => {
+            if (currentView !== 'flashcard') return;
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+            if (e.code === 'Space') {
+                e.preventDefault();
+                flipCard();
+            } else if (e.code === 'ArrowRight') {
+                nextCard();
+            } else if (e.code === 'ArrowLeft') {
+                prevCard();
+            }
+        });
+
+        // ============================================================
+        // 9. TYPING PRACTICE MODE (BI-DIRECTIONAL)
+        // ============================================================
+        window.startTyping = function(topicId, customWords = null) {
+            const topic = appTopics.find(t => t.id === topicId);
+            const sourceWords = customWords || topic?.words || [];
+            if (!topic || sourceWords.length === 0) {
+                showToast('Chủ đề này chưa có từ vựng để luyện gõ!', 'error');
+                return;
+            }
+
+            currentTopicId = topicId;
+            document.getElementById('tp-topic-title').textContent = topic.title;
+
+            // Shuffle queue
+            const shuffled = [...sourceWords].sort(() => Math.random() - 0.5);
+            tpState = {
+                mode: tpState.mode || 'vi-to-en',
+                queue: shuffled,
+                currentIndex: 0,
+                score: 0,
+                wrongWords: [],
+                answered: false,
+                hintLevel: 0
+            };
+
+            navigateTo('typing');
+            updateTypingModeButtons();
+            document.getElementById('tp-quiz-container').classList.remove('hidden');
+            document.getElementById('tp-summary-container').classList.add('hidden');
+            renderTypingQuestion();
+        };
+
+        window.setTypingMode = function(mode) {
+            tpState.mode = mode;
+            updateTypingModeButtons();
+            startTyping(currentTopicId);
+        };
+
+        function updateTypingModeButtons() {
+            const btnViEn = document.getElementById('tp-mode-vi-en');
+            const btnEnVi = document.getElementById('tp-mode-en-vi');
+            const activeCls = 'flex-1 py-2.5 px-3 rounded-xl text-xs sm:text-sm font-semibold transition-all bg-brand-600 text-white shadow-sm';
+            const inactiveCls = 'flex-1 py-2.5 px-3 rounded-xl text-xs sm:text-sm font-semibold transition-all text-slate-600 hover:bg-slate-50';
+
+            btnViEn.className = tpState.mode === 'vi-to-en' ? activeCls : inactiveCls;
+            btnEnVi.className = tpState.mode === 'en-to-vi' ? activeCls : inactiveCls;
+        }
+
+        function renderTypingQuestion() {
+            const word = tpState.queue[tpState.currentIndex];
+            const isViToEn = tpState.mode === 'vi-to-en';
+
+            document.getElementById('tp-current-num').textContent = tpState.currentIndex + 1;
+            document.getElementById('tp-total-num').textContent = tpState.queue.length;
+            document.getElementById('tp-score-num').textContent = tpState.score;
+            const pct = Math.round((tpState.currentIndex / tpState.queue.length) * 100);
+            document.getElementById('tp-progress-bar').style.width = pct + '%';
+
+            document.getElementById('tp-prompt-label').textContent = isViToEn ? 'Nhập từ Tiếng Anh cho nghĩa sau:' : 'Nhập nghĩa Tiếng Việt cho từ sau:';
+            document.getElementById('tp-prompt-word').textContent = isViToEn ? word.vi : word.en;
+            document.getElementById('tp-prompt-phonetic').textContent = !isViToEn ? (word.phonetic || '') : '';
+            document.getElementById('tp-speak-btn').classList.toggle('hidden', isViToEn);
+
+            const input = document.getElementById('tp-answer-input');
+            input.value = '';
+            input.disabled = false;
+            input.className = 'w-full px-4 py-3.5 rounded-2xl border-2 border-slate-200 focus:border-brand-500 focus:ring-4 focus:ring-brand-500/15 outline-none text-base font-medium text-center transition-all';
+            input.placeholder = isViToEn ? 'Nhập từ tiếng Anh...' : 'Nhập nghĩa tiếng Việt...';
+            input.focus();
+
+            document.getElementById('tp-feedback').classList.add('hidden');
+            document.getElementById('tp-hint-box').classList.add('hidden');
+            document.getElementById('tp-hint-btn').classList.remove('hidden');
+            document.getElementById('tp-submit-btn').classList.remove('hidden');
+            document.getElementById('tp-next-btn').classList.add('hidden');
+
+            tpState.answered = false;
+            tpState.hintLevel = 0;
+        }
+
+        window.speakTypingPrompt = function() {
+            const word = tpState.queue[tpState.currentIndex];
+            if (word) speakWord(word);
+        };
+
+        window.showTypingHint = function() {
+            const word = tpState.queue[tpState.currentIndex];
+            const target = tpState.mode === 'vi-to-en' ? word.en : word.vi;
+            tpState.hintLevel = Math.min(tpState.hintLevel + 1, Math.max(1, Math.floor(target.length / 2)));
+
+            const revealed = target.slice(0, tpState.hintLevel);
+            const masked = target.slice(tpState.hintLevel).replace(/[^\s]/g, '•');
+            const hintBox = document.getElementById('tp-hint-box');
+            hintBox.innerHTML = `<i class="fa-regular fa-lightbulb"></i> Gợi ý: ${escapeHtml(revealed + masked)}`;
+            hintBox.classList.remove('hidden');
+            document.getElementById('tp-answer-input').focus();
+        };
+
+        window.handleTypingSubmit = function(e) {
+            e.preventDefault();
+            if (tpState.answered) {
+                nextTypingQuestion();
+                return;
+            }
+
+            const input = document.getElementById('tp-answer-input');
+            const userAns = normalizeAnswer(input.value);
+            if (!userAns) return;
+
+            const word = tpState.queue[tpState.currentIndex];
+            const expectedRaw = tpState.mode === 'vi-to-en' ? word.en : word.vi;
+
+            // Accept exact match OR any comma/slash separated valid meaning
+            const validVariants = expectedRaw.split(/[,;/]/).map(s => normalizeAnswer(s)).filter(Boolean);
+            validVariants.push(normalizeAnswer(expectedRaw));
+
+            const isCorrect = validVariants.includes(userAns);
+            tpState.answered = true;
+            input.disabled = true;
+
+            const fb = document.getElementById('tp-feedback');
+            fb.classList.remove('hidden');
+
+            if (isCorrect) {
+                tpState.score++;
+                document.getElementById('tp-score-num').textContent = tpState.score;
+                input.classList.add('border-emerald-500', 'bg-emerald-50/50', 'text-emerald-800');
+                fb.className = 'p-4 rounded-2xl text-sm font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center justify-between';
+                fb.innerHTML = `<span><i class="fa-solid fa-circle-check mr-2"></i>Chính xác! Đáp án: <b>${escapeHtml(expectedRaw)}</b></span>`;
+                speakWord(word);
+            } else {
+                tpState.wrongWords.push(word);
+                input.classList.add('border-rose-500', 'bg-rose-50/50', 'text-rose-800');
+                fb.className = 'p-4 rounded-2xl text-sm font-medium bg-rose-50 text-rose-700 border border-rose-200';
+                fb.innerHTML = `
+                    <div class="font-bold"><i class="fa-solid fa-circle-xmark mr-1.5"></i>Chưa chính xác!</div>
+                    <div class="mt-1">Đáp án chuẩn: <b class="text-slate-900">${escapeHtml(expectedRaw)}</b> ${word.phonetic ? `<span class="font-mono text-xs text-slate-500">(${escapeHtml(word.phonetic)})</span>` : ''}</div>
+                `;
+            }
+
+            document.getElementById('tp-hint-btn').classList.add('hidden');
+            document.getElementById('tp-submit-btn').classList.add('hidden');
+            const nextBtn = document.getElementById('tp-next-btn');
+            nextBtn.classList.remove('hidden');
+            nextBtn.innerHTML = tpState.currentIndex < tpState.queue.length - 1
+                ? 'Câu tiếp theo <i class="fa-solid fa-arrow-right ml-1.5"></i>'
+                : 'Xem kết quả <i class="fa-solid fa-flag-checkered ml-1.5"></i>';
+            nextBtn.focus();
+        };
+
+        window.nextTypingQuestion = function() {
+            if (tpState.currentIndex < tpState.queue.length - 1) {
+                tpState.currentIndex++;
+                renderTypingQuestion();
+            } else {
+                showTypingSummary();
+            }
+        };
+
+        function showTypingSummary() {
+            document.getElementById('tp-quiz-container').classList.add('hidden');
+            document.getElementById('tp-summary-container').classList.remove('hidden');
+
+            const total = tpState.queue.length;
+            const correct = tpState.score;
+            const acc = Math.round((correct / total) * 100);
+
+            document.getElementById('tp-sum-total').textContent = total;
+            document.getElementById('tp-sum-correct').textContent = correct;
+            document.getElementById('tp-sum-acc').textContent = acc + '%';
+
+            let msg = 'Cố gắng luyện tập thêm nhé!';
+            if (acc === 100) msg = 'Xuất sắc! Bạn đã thuộc hoàn toàn bộ từ này!';
+            else if (acc >= 80) msg = 'Rất tốt! Bạn nắm vững phần lớn từ vựng.';
+            else if (acc >= 50) msg = 'Khá ổn! Hãy ôn lại những từ làm sai bên dưới.';
+            document.getElementById('tp-summary-msg').textContent = msg;
+
+            const wrongSec = document.getElementById('tp-wrong-section');
+            const retryWrongBtn = document.getElementById('tp-retry-wrong-btn');
+
+            if (tpState.wrongWords.length > 0) {
+                wrongSec.classList.remove('hidden');
+                retryWrongBtn.classList.remove('hidden');
+                document.getElementById('tp-wrong-list').innerHTML = tpState.wrongWords.map(w => `
+                    <div class="p-3 rounded-xl bg-rose-50/70 border border-rose-100 flex items-center justify-between text-sm">
+                        <div>
+                            <span class="font-bold text-slate-900">${escapeHtml(w.en)}</span>
+                            <span class="text-slate-400 mx-1.5">—</span>
+                            <span class="text-slate-700">${escapeHtml(w.vi)}</span>
+                        </div>
+                        <button onclick="speakText('${escapeJs(w.en)}')" class="text-brand-600 hover:text-brand-700 p-1">
+                            <i class="fa-solid fa-volume-high text-xs"></i>
+                        </button>
+                    </div>
+                `).join('');
+            } else {
+                wrongSec.classList.add('hidden');
+                retryWrongBtn.classList.add('hidden');
+            }
+        }
+
+        window.retryWrongTyping = function() {
+            if (tpState.wrongWords.length > 0) {
+                startTyping(currentTopicId, [...tpState.wrongWords]);
+            }
+        };
+
+        function normalizeAnswer(str) {
+            return (str || '').trim().toLowerCase().replace(/\s+/g, ' ');
+        }
+
+        // ============================================================
+        // 10. ADMIN DASHBOARD
+        // ============================================================
+        window.switchAdminTab = function(tab) {
+            const usersPanel = document.getElementById('admin-panel-users');
+            const topicsPanel = document.getElementById('admin-panel-topics');
+            const usersTab = document.getElementById('admin-tab-users');
+            const topicsTab = document.getElementById('admin-tab-topics');
+
+            const activeCls = 'px-4 py-2 rounded-xl text-sm font-semibold transition-all bg-brand-600 text-white shadow-sm';
+            const inactiveCls = 'px-4 py-2 rounded-xl text-sm font-semibold transition-all bg-white text-slate-600 border border-slate-200 hover:bg-slate-50';
+
+            if (tab === 'topics') {
+                usersPanel.classList.add('hidden');
+                topicsPanel.classList.remove('hidden');
+                usersTab.className = inactiveCls;
+                topicsTab.className = activeCls;
+            } else {
+                topicsPanel.classList.add('hidden');
+                usersPanel.classList.remove('hidden');
+                usersTab.className = activeCls;
+                topicsTab.className = inactiveCls;
+            }
+        };
+
+        function renderAdminDashboard() {
+            const totalWords = appTopics.reduce((sum, t) => sum + ((t.words || []).length), 0);
+            document.getElementById('admin-stat-users').textContent = appUsers.length;
+            document.getElementById('admin-stat-topics').textContent = appTopics.length;
+            document.getElementById('admin-stat-words').textContent = totalWords;
+
+            // Render Users Table
+            const usersTbody = document.getElementById('admin-users-tbody');
+            usersTbody.innerHTML = appUsers.map(u => {
+                const isSelf = currentUser && u.id === currentUser.id;
+                const isAdmin = u.role === 'admin';
+                return `
+                    <tr class="hover:bg-slate-50/70 transition-colors">
+                        <td class="py-3.5 px-5">
+                            <div class="flex items-center gap-3">
+                                <div class="w-8 h-8 rounded-lg ${isAdmin ? 'bg-indigo-100 text-indigo-700' : 'bg-brand-100 text-brand-700'} font-bold text-xs flex items-center justify-center">
+                                    ${escapeHtml((u.displayName || 'U').charAt(0).toUpperCase())}
+                                </div>
+                                <span class="font-bold text-slate-800">${escapeHtml(u.displayName)}${isSelf ? ' <span class="text-[11px] font-semibold text-brand-600">(Bạn)</span>' : ''}</span>
+                            </div>
+                        </td>
+                        <td class="py-3.5 px-5 font-mono text-xs text-slate-600">${escapeHtml(u.username)}</td>
+                        <td class="py-3.5 px-5">
+                            <span class="px-2.5 py-1 rounded-full text-xs font-bold ${isAdmin ? 'bg-indigo-50 text-indigo-700' : 'bg-slate-100 text-slate-600'}">
+                                ${isAdmin ? 'Quản trị viên' : 'Học viên'}
+                            </span>
+                        </td>
+                        <td class="py-3.5 px-5">
+                            <span class="px-2.5 py-1 rounded-full text-xs font-bold ${u.locked ? 'bg-rose-50 text-rose-700' : 'bg-emerald-50 text-emerald-700'}">
+                                ${u.locked ? 'Đã khóa' : 'Hoạt động'}
+                            </span>
+                        </td>
+                        <td class="py-3.5 px-5 text-right">
+                            ${isSelf ? '<span class="text-xs text-slate-400 italic">Tài khoản hiện tại</span>' : `
+                                <div class="inline-flex items-center gap-1.5">
+                                    <button onclick="adminToggleRole('${u.id}')" class="px-2.5 py-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-semibold transition-all" title="Đổi vai trò">
+                                        ${isAdmin ? 'Hạ User' : 'Lên Admin'}
+                                    </button>
+                                    <button onclick="adminToggleLock('${u.id}')" class="px-2.5 py-1.5 rounded-lg ${u.locked ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700' : 'bg-amber-50 hover:bg-amber-100 text-amber-700'} text-xs font-semibold transition-all">
+                                        ${u.locked ? 'Mở khóa' : 'Khóa'}
+                                    </button>
+                                    <button onclick="adminDeleteUser('${u.id}')" class="p-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 transition-all" title="Xóa tài khoản">
+                                        <i class="fa-solid fa-trash text-xs"></i>
+                                    </button>
+                                </div>
+                            `}
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+
+            // Render Topics Table
+            const topicsTbody = document.getElementById('admin-topics-tbody');
+            topicsTbody.innerHTML = appTopics.map(t => `
+                <tr class="hover:bg-slate-50/70 transition-colors">
+                    <td class="py-3.5 px-5">
+                        <div class="font-bold text-slate-800">${escapeHtml(t.title)}</div>
+                        <div class="text-[11px] font-mono text-slate-400">${escapeHtml(t.shareCode || '')}</div>
+                    </td>
+                    <td class="py-3.5 px-5 text-slate-600">${escapeHtml(t.ownerName || 'Ẩn danh')}</td>
+                    <td class="py-3.5 px-5 font-semibold text-brand-700">${(t.words || []).length} từ</td>
+                    <td class="py-3.5 px-5">
+                        <button onclick="adminToggleTopicPublic('${t.id}')" class="px-2.5 py-1 rounded-full text-xs font-bold transition-all ${t.isPublic ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}">
+                            ${t.isPublic ? '<i class="fa-solid fa-globe mr-1"></i>Công khai' : '<i class="fa-solid fa-lock mr-1"></i>Riêng tư'}
+                        </button>
+                    </td>
+                    <td class="py-3.5 px-5 text-right">
+                        <div class="inline-flex items-center gap-1.5">
+                            <button onclick="openTopicDetail('${t.id}')" class="px-2.5 py-1.5 rounded-lg bg-brand-50 hover:bg-brand-100 text-brand-700 text-xs font-semibold transition-all">
+                                Xem
+                            </button>
+                            <button onclick="confirmDeleteTopic('${t.id}')" class="p-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 transition-all" title="Xóa chủ đề">
+                                <i class="fa-solid fa-trash text-xs"></i>
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        window.adminToggleRole = async function(userId) {
+            const u = appUsers.find(x => x.id === userId);
+            if (!u) return;
+            const newRole = u.role === 'admin' ? 'user' : 'admin';
+            await saveUserDoc({ ...u, role: newRole });
+            renderAdminDashboard();
+            showToast(`Đã đổi vai trò của ${u.displayName} thành ${newRole === 'admin' ? 'Quản trị viên' : 'Học viên'}.`, 'success');
+        };
+
+        window.adminToggleLock = async function(userId) {
+            const u = appUsers.find(x => x.id === userId);
+            if (!u) return;
+            await saveUserDoc({ ...u, locked: !u.locked });
+            renderAdminDashboard();
+            showToast(u.locked ? `Đã mở khóa tài khoản ${u.displayName}.` : `Đã khóa tài khoản ${u.displayName}.`, 'info');
+        };
+
+        window.adminDeleteUser = function(userId) {
+            const u = appUsers.find(x => x.id === userId);
+            if (!u) return;
+            openConfirmModal(
+                'Xóa tài khoản?',
+                `Bạn có chắc chắn muốn xóa tài khoản "${u.displayName}" (${u.username}) khỏi hệ thống?`,
+                async () => {
+                    await deleteUserDoc(userId);
+                    renderAdminDashboard();
+                    showToast('Đã xóa tài khoản.', 'success');
+                }
+            );
+        };
+
+        window.adminToggleTopicPublic = async function(topicId) {
+            const t = appTopics.find(x => x.id === topicId);
+            if (!t) return;
+            await saveTopicDoc({ ...t, isPublic: !t.isPublic });
+            renderAdminDashboard();
+            showToast(t.isPublic ? 'Đã chuyển chủ đề sang Riêng tư.' : 'Đã bật Công khai cho chủ đề.', 'success');
+        };
+
+        // ============================================================
+        // 11. UTILITIES: SPEECH (NATIVE AUDIO + TTS), MODALS, TOASTS
+        // ============================================================
+        window.speakWord = function(wordObj) {
+            if (!wordObj) return;
+            if (wordObj.audio) {
+                try {
+                    if (activeAudioPlayer) {
+                        activeAudioPlayer.pause();
+                        activeAudioPlayer = null;
+                    }
+                    activeAudioPlayer = new Audio(wordObj.audio);
+                    activeAudioPlayer.play().catch(() => speakText(wordObj.en));
+                    return;
+                } catch (e) {
+                    // Fallback to SpeechSynthesis
+                }
+            }
+            speakText(wordObj.en);
+        };
+
+        window.speakWordById = function(wordId) {
+            const topic = appTopics.find(t => t.id === currentTopicId);
+            const word = (topic?.words || []).find(w => w.id === wordId);
+            if (word) speakWord(word);
+        };
+
+        window.speakText = function(text) {
+            if (!('speechSynthesis' in window)) {
+                showToast('Trình duyệt không hỗ trợ phát âm tự động.', 'error');
+                return;
+            }
+            window.speechSynthesis.cancel();
+            const utter = new SpeechSynthesisUtterance(text);
+            utter.lang = 'en-US';
+            utter.rate = 0.92;
+            window.speechSynthesis.speak(utter);
+        };
+
+        window.closeModal = function(modalId) {
+            document.getElementById(modalId).classList.add('hidden');
+        };
+
+        function openConfirmModal(title, message, onConfirm) {
+            document.getElementById('confirm-title').textContent = title;
+            document.getElementById('confirm-message').textContent = message;
+            confirmCallback = onConfirm;
+            document.getElementById('confirm-modal').classList.remove('hidden');
+        }
+
+        window.closeConfirmModal = function(confirmed) {
+            document.getElementById('confirm-modal').classList.add('hidden');
+            if (confirmed && typeof confirmCallback === 'function') {
+                confirmCallback();
+            }
+            confirmCallback = null;
+        };
+
+        window.showToast = function(message, type = 'info') {
+            const container = document.getElementById('toast-container');
+            const colors = {
+                success: 'bg-emerald-600 text-white',
+                error: 'bg-rose-600 text-white',
+                info: 'bg-slate-800 text-white'
+            };
+            const icons = {
+                success: 'fa-circle-check',
+                error: 'fa-circle-exclamation',
+                info: 'fa-circle-info'
+            };
+
+            const toast = document.createElement('div');
+            toast.className = `pointer-events-auto toast-enter flex items-center gap-2.5 px-4 py-3 rounded-2xl shadow-lg text-sm font-medium ${colors[type] || colors.info}`;
+            toast.innerHTML = `<i class="fa-solid ${icons[type] || icons.info}"></i><span>${escapeHtml(message)}</span>`;
+            container.appendChild(toast);
+
+            setTimeout(() => {
+                toast.classList.add('opacity-0', 'transition-opacity', 'duration-300');
+                setTimeout(() => toast.remove(), 300);
+            }, 3200);
+        };
+
+        function escapeHtml(str) {
+            return String(str || '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        function escapeJs(str) {
+            return String(str || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+        }
+
+        // Start App
+        window.addEventListener('DOMContentLoaded', initApp);
+    </script>
+</body>
+</html>
