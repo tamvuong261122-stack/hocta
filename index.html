@@ -1672,6 +1672,20 @@
 
             const defaultView = isAdmin ? 'admin' : 'my-topics';
             navigateTo(defaultView);
+
+            // Mở nhanh chủ đề nếu link có tham số ?share=CODE
+            try {
+                const params = new URLSearchParams(window.location.search);
+                const shareCode = (params.get('share') || '').trim().toUpperCase();
+                if (shareCode) {
+                    const matched = appTopics.find(t => (t.shareCode || '').toUpperCase() === shareCode);
+                    if (matched) {
+                        openTopicDetail(matched.id);
+                    }
+                }
+            } catch (err) {
+                console.warn('Share query check error:', err);
+            }
         }
 
         function updateNavbarUser() {
@@ -1728,6 +1742,468 @@
 
             refreshCurrentView();
             window.scrollTo({ top: 0, behavior: 'smooth' });
+        };
+
+        function refreshCurrentView() {
+            if (!currentUser) return;
+            if (currentView === 'my-topics') renderMyTopics();
+            else if (currentView === 'community') renderCommunityTopics();
+            else if (currentView === 'topic-detail' && currentTopicId) renderTopicDetail(currentTopicId);
+            else if (currentView === 'admin') renderAdminDashboard();
+        }
+
+        // ============================================================
+        // 4. MY TOPICS & TOPIC CRUD
+        // ============================================================
+        function renderMyTopics() {
+            const grid = document.getElementById('my-topics-grid');
+            if (!grid || !currentUser) return;
+
+            const keyword = (document.getElementById('my-topics-search')?.value || '').trim().toLowerCase();
+            const mine = appTopics.filter(t => {
+                if (t.ownerId !== currentUser.id) return false;
+                if (!keyword) return true;
+                return (t.title || '').toLowerCase().includes(keyword) ||
+                    (t.description || '').toLowerCase().includes(keyword) ||
+                    (t.shareCode || '').toLowerCase().includes(keyword);
+            });
+
+            if (mine.length === 0) {
+                grid.innerHTML = `
+                    <div class="col-span-full bg-white rounded-3xl p-10 border border-dashed border-slate-300 text-center">
+                        <div class="w-14 h-14 rounded-2xl bg-brand-50 text-brand-600 flex items-center justify-center text-2xl mx-auto mb-3">
+                            <i class="fa-solid fa-folder-plus"></i>
+                        </div>
+                        <h3 class="text-base font-bold text-slate-800">Chưa có chủ đề nào</h3>
+                        <p class="text-sm text-slate-500 mt-1 mb-4">Hãy tạo bộ từ vựng đầu tiên của bạn để bắt đầu học Flashcard & Luyện gõ.</p>
+                        <button onclick="openTopicModal()" class="px-5 py-2.5 bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold rounded-xl shadow-sm transition-all">
+                            <i class="fa-solid fa-plus mr-1.5"></i> Tạo chủ đề mới
+                        </button>
+                    </div>
+                `;
+                return;
+            }
+
+            grid.innerHTML = mine.map(t => renderTopicCard(t, true)).join('');
+        }
+
+        function renderTopicCard(topic, isOwnerView) {
+            const wordCount = (topic.words || []).length;
+            const progressKey = currentUser ? `${currentUser.id}_${topic.id}` : '';
+            const statuses = (progressKey && appProgress[progressKey]) ? appProgress[progressKey] : {};
+            const knownCount = Object.values(statuses).filter(s => s === 'known').length;
+            const pct = wordCount > 0 ? Math.round((knownCount / wordCount) * 100) : 0;
+
+            return `
+                <div class="bg-white rounded-3xl p-5 border border-slate-200/80 shadow-sm hover:shadow-md hover:border-brand-200 transition-all flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-start justify-between gap-2 mb-3">
+                            <div class="flex flex-wrap items-center gap-1.5">
+                                <span class="px-2.5 py-1 rounded-lg text-[11px] font-bold ${topic.isPublic ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-600'}">
+                                    <i class="fa-solid ${topic.isPublic ? 'fa-globe' : 'fa-lock'} mr-1"></i>${topic.isPublic ? 'Công khai' : 'Riêng tư'}
+                                </span>
+                                ${topic.shareCode ? `<span class="px-2 py-1 rounded-lg text-[11px] font-mono font-semibold bg-brand-50 text-brand-700">${escapeHtml(topic.shareCode)}</span>` : ''}
+                            </div>
+                            ${isOwnerView ? `
+                                <div class="flex items-center gap-1">
+                                    <button onclick="openShareModal('${topic.id}')" class="p-2 rounded-lg text-slate-400 hover:text-brand-600 hover:bg-brand-50 transition-colors" title="Chia sẻ">
+                                        <i class="fa-solid fa-share-nodes text-xs"></i>
+                                    </button>
+                                    <button onclick="openTopicModal('${topic.id}')" class="p-2 rounded-lg text-slate-400 hover:text-amber-600 hover:bg-amber-50 transition-colors" title="Sửa chủ đề">
+                                        <i class="fa-solid fa-pen text-xs"></i>
+                                    </button>
+                                    <button onclick="confirmDeleteTopic('${topic.id}')" class="p-2 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors" title="Xóa chủ đề">
+                                        <i class="fa-solid fa-trash text-xs"></i>
+                                    </button>
+                                </div>
+                            ` : ''}
+                        </div>
+
+                        <h3 onclick="openTopicDetail('${topic.id}')" class="text-lg font-extrabold text-slate-900 hover:text-brand-600 cursor-pointer transition-colors line-clamp-1">
+                            ${escapeHtml(topic.title)}
+                        </h3>
+                        <p class="text-xs text-slate-500 mt-1 line-clamp-2 min-h-[2rem]">
+                            ${escapeHtml(topic.description || 'Chưa có mô tả cho chủ đề này.')}
+                        </p>
+
+                        <div class="flex items-center justify-between text-xs font-semibold text-slate-500 mt-4 mb-1.5">
+                            <span><i class="fa-solid fa-layer-group text-brand-500 mr-1"></i>${wordCount} từ vựng</span>
+                            <span>${isOwnerView ? `Đã thuộc: ${pct}%` : `Tác giả: ${escapeHtml(topic.ownerName || 'Ẩn danh')}`}</span>
+                        </div>
+                        ${isOwnerView ? `
+                            <div class="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden mb-4">
+                                <div class="h-full bg-emerald-500 transition-all duration-300" style="width: ${pct}%"></div>
+                            </div>
+                        ` : '<div class="mb-4"></div>'}
+                    </div>
+
+                    <div class="grid grid-cols-3 gap-2 pt-3 border-t border-slate-100">
+                        <button onclick="openTopicDetail('${topic.id}')" class="py-2 px-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition-all flex items-center justify-center gap-1">
+                            <i class="fa-solid fa-list"></i> Từ vựng
+                        </button>
+                        <button onclick="startFlashcard('${topic.id}')" class="py-2 px-2.5 rounded-xl bg-brand-50 hover:bg-brand-100 text-brand-700 text-xs font-semibold transition-all flex items-center justify-center gap-1">
+                            <i class="fa-solid fa-clone"></i> Thẻ ghi nhớ
+                        </button>
+                        <button onclick="startTyping('${topic.id}')" class="py-2 px-2.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-semibold transition-all flex items-center justify-center gap-1">
+                            <i class="fa-solid fa-keyboard"></i> Luyện gõ
+                        </button>
+                    </div>
+                </div>
+            `;
+        }
+
+        window.openTopicModal = function(topicId = null) {
+            const modal = document.getElementById('topic-modal');
+            const titleEl = document.getElementById('topic-modal-title');
+            const idInput = document.getElementById('topic-modal-id');
+            const nameInput = document.getElementById('topic-modal-name');
+            const descInput = document.getElementById('topic-modal-desc');
+            const pubInput = document.getElementById('topic-modal-public');
+
+            if (topicId) {
+                const topic = appTopics.find(t => t.id === topicId);
+                if (!topic) return;
+                titleEl.textContent = 'Chỉnh sửa chủ đề';
+                idInput.value = topic.id;
+                nameInput.value = topic.title || '';
+                descInput.value = topic.description || '';
+                pubInput.checked = !!topic.isPublic;
+            } else {
+                titleEl.textContent = 'Tạo chủ đề mới';
+                idInput.value = '';
+                nameInput.value = '';
+                descInput.value = '';
+                pubInput.checked = false;
+            }
+
+            modal.classList.remove('hidden');
+            nameInput.focus();
+        };
+
+        window.handleSaveTopic = async function(e) {
+            e.preventDefault();
+            if (!currentUser) return;
+
+            const idVal = document.getElementById('topic-modal-id').value.trim();
+            const title = document.getElementById('topic-modal-name').value.trim();
+            const description = document.getElementById('topic-modal-desc').value.trim();
+            const isPublic = document.getElementById('topic-modal-public').checked;
+
+            if (!title) return;
+
+            if (idVal) {
+                const existing = appTopics.find(t => t.id === idVal);
+                if (!existing) return;
+                await saveTopicDoc({
+                    ...existing,
+                    title,
+                    description,
+                    isPublic
+                });
+                showToast('Đã cập nhật chủ đề!', 'success');
+            } else {
+                const newTopic = {
+                    id: 'topic_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+                    title,
+                    description,
+                    ownerId: currentUser.id,
+                    ownerName: currentUser.displayName,
+                    isPublic,
+                    shareCode: 'VOC-' + Math.random().toString(36).substring(2, 6).toUpperCase(),
+                    createdAt: new Date().toISOString(),
+                    words: []
+                };
+                await saveTopicDoc(newTopic);
+                showToast(`Đã tạo chủ đề "${title}"!`, 'success');
+            }
+
+            closeModal('topic-modal');
+            refreshCurrentView();
+        };
+
+        window.confirmDeleteTopic = function(topicId) {
+            const topic = appTopics.find(t => t.id === topicId);
+            if (!topic) return;
+            openConfirmModal(
+                'Xóa chủ đề?',
+                `Bạn có chắc chắn muốn xóa chủ đề "${topic.title}" cùng toàn bộ ${((topic.words || []).length)} từ vựng bên trong?`,
+                async () => {
+                    await deleteTopicDoc(topicId);
+                    if (currentTopicId === topicId && currentView === 'topic-detail') {
+                        navigateTo(previousView || 'my-topics');
+                    } else {
+                        refreshCurrentView();
+                    }
+                    showToast('Đã xóa chủ đề.', 'success');
+                }
+            );
+        };
+
+        // ============================================================
+        // 5. COMMUNITY TOPICS & SHARE CODE
+        // ============================================================
+        function renderCommunityTopics() {
+            const grid = document.getElementById('community-grid');
+            if (!grid) return;
+
+            const keyword = (document.getElementById('community-search')?.value || '').trim().toLowerCase();
+            const publicTopics = appTopics.filter(t => {
+                if (!t.isPublic) return false;
+                if (!keyword) return true;
+                return (t.title || '').toLowerCase().includes(keyword) ||
+                    (t.description || '').toLowerCase().includes(keyword) ||
+                    (t.ownerName || '').toLowerCase().includes(keyword) ||
+                    (t.shareCode || '').toLowerCase().includes(keyword);
+            });
+
+            if (publicTopics.length === 0) {
+                grid.innerHTML = `
+                    <div class="col-span-full bg-white rounded-3xl p-10 border border-slate-200/80 text-center">
+                        <div class="w-12 h-12 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center text-xl mx-auto mb-3">
+                            <i class="fa-solid fa-globe"></i>
+                        </div>
+                        <p class="text-sm font-semibold text-slate-600">Không tìm thấy chủ đề công khai phù hợp.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            grid.innerHTML = publicTopics.map(t => renderTopicCard(t, false)).join('');
+        }
+
+        window.handleOpenByShareCode = function(e) {
+            e.preventDefault();
+            const input = document.getElementById('share-code-input');
+            const code = (input?.value || '').trim().toUpperCase();
+            if (!code) {
+                showToast('Vui lòng nhập mã chia sẻ!', 'info');
+                return;
+            }
+            const found = appTopics.find(t => (t.shareCode || '').toUpperCase() === code);
+            if (!found) {
+                showToast(`Không tìm thấy chủ đề nào với mã "${code}"!`, 'error');
+                return;
+            }
+            openTopicDetail(found.id);
+        };
+
+        // ============================================================
+        // 6. TOPIC DETAIL, WORDS CRUD & DICTIONARY IPA
+        // ============================================================
+        window.openTopicDetail = function(topicId) {
+            const topic = appTopics.find(t => t.id === topicId);
+            if (!topic) {
+                showToast('Không tìm thấy chủ đề!', 'error');
+                return;
+            }
+            currentTopicId = topicId;
+            navigateTo('topic-detail');
+        };
+
+        window.goBackFromDetail = function() {
+            const target = (previousView && previousView !== 'topic-detail') ? previousView : (currentUser?.role === 'admin' ? 'admin' : 'my-topics');
+            navigateTo(target);
+        };
+
+        function renderTopicDetail(topicId) {
+            const topic = appTopics.find(t => t.id === topicId);
+            if (!topic || !currentUser) return;
+
+            const isOwner = topic.ownerId === currentUser.id;
+            const isAdmin = currentUser.role === 'admin';
+            const canEdit = isOwner || isAdmin;
+
+            const visBadge = document.getElementById('detail-visibility-badge');
+            visBadge.className = `px-2.5 py-1 rounded-lg text-xs font-bold ${topic.isPublic ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-600'}`;
+            visBadge.innerHTML = `<i class="fa-solid ${topic.isPublic ? 'fa-globe' : 'fa-lock'} mr-1"></i>${topic.isPublic ? 'Công khai' : 'Riêng tư'}`;
+
+            document.getElementById('detail-code-badge').textContent = `Mã: ${topic.shareCode || 'N/A'}`;
+            document.getElementById('detail-author-badge').textContent = `Tác giả: ${topic.ownerName || 'Ẩn danh'}`;
+            document.getElementById('detail-title').textContent = topic.title || '';
+            document.getElementById('detail-desc').textContent = topic.description || 'Chưa có mô tả cho chủ đề này.';
+
+            document.getElementById('detail-share-btn').classList.toggle('hidden', !canEdit);
+            document.getElementById('detail-edit-topic-btn').classList.toggle('hidden', !canEdit);
+            document.getElementById('detail-clone-btn').classList.toggle('hidden', isOwner);
+            document.getElementById('add-word-panel').classList.toggle('hidden', !canEdit);
+
+            const words = topic.words || [];
+            document.getElementById('detail-word-count').textContent = words.length;
+
+            const bulkBtn = document.getElementById('btn-bulk-ipa');
+            const missingCount = words.filter(w => !w.phonetic || !w.phonetic.trim()).length;
+            if (canEdit && missingCount > 0) {
+                bulkBtn.classList.remove('hidden');
+                document.getElementById('btn-bulk-ipa-text').textContent = `Tự động điền IPA (${missingCount} từ thiếu)`;
+            } else {
+                bulkBtn.classList.add('hidden');
+            }
+
+            const listEl = document.getElementById('detail-words-list');
+            if (words.length === 0) {
+                listEl.innerHTML = `
+                    <div class="p-10 text-center text-sm text-slate-400">
+                        Chưa có từ vựng nào trong chủ đề này.${canEdit ? ' Hãy thêm từ mới ở khung phía trên nhé!' : ''}
+                    </div>
+                `;
+                return;
+            }
+
+            listEl.innerHTML = words.map((w, idx) => `
+                <div class="px-6 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-slate-50/70 transition-colors">
+                    <div class="flex items-start sm:items-center gap-3.5 min-w-0">
+                        <span class="w-7 h-7 rounded-lg bg-slate-100 text-slate-500 font-bold text-xs flex items-center justify-center shrink-0 mt-0.5 sm:mt-0">
+                            ${idx + 1}
+                        </span>
+                        <div class="min-w-0">
+                            <div class="flex flex-wrap items-center gap-2">
+                                <span class="font-extrabold text-slate-900 text-base">${escapeHtml(w.en)}</span>
+                                ${w.phonetic ? `<span class="font-mono text-xs text-brand-600 bg-brand-50 px-2 py-0.5 rounded-md">${escapeHtml(w.phonetic)}</span>` : ''}
+                            </div>
+                            <div class="text-sm text-slate-600 mt-0.5">${escapeHtml(w.vi)}</div>
+                        </div>
+                    </div>
+
+                    <div class="flex items-center gap-1.5 self-end sm:self-center shrink-0">
+                        <button onclick="speakWordById('${w.id}')" class="p-2 rounded-xl bg-brand-50 hover:bg-brand-100 text-brand-600 transition-colors" title="Nghe phát âm">
+                            <i class="fa-solid fa-volume-high text-xs"></i>
+                        </button>
+                        ${canEdit ? `
+                            <button onclick="openEditWordModal('${w.id}')" class="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 transition-colors" title="Sửa từ">
+                                <i class="fa-solid fa-pen text-xs"></i>
+                            </button>
+                            <button onclick="deleteWord('${w.id}')" class="p-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 transition-colors" title="Xóa từ">
+                                <i class="fa-solid fa-trash text-xs"></i>
+                            </button>
+                        ` : ''}
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        window.cloneTopic = async function(topicId) {
+            if (!currentUser) return;
+            const src = appTopics.find(t => t.id === topicId);
+            if (!src) return;
+
+            const copied = {
+                id: 'topic_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+                title: `${src.title} (Bản sao)`,
+                description: src.description || '',
+                ownerId: currentUser.id,
+                ownerName: currentUser.displayName,
+                isPublic: false,
+                shareCode: 'VOC-' + Math.random().toString(36).substring(2, 6).toUpperCase(),
+                createdAt: new Date().toISOString(),
+                words: (src.words || []).map(w => ({
+                    ...w,
+                    id: 'w_' + Math.random().toString(36).slice(2, 8)
+                }))
+            };
+
+            await saveTopicDoc(copied);
+            showToast(`Đã lưu bản sao "${copied.title}" vào Chủ đề của tôi!`, 'success');
+        };
+
+        async function lookupDictionaryIPA(rawWord) {
+            const cleanWord = String(rawWord || '').trim().split(/\s+/)[0].replace(/^[^a-zA-Z-]+|[^a-zA-Z-]+$/g, '').toLowerCase();
+            if (!cleanWord) return { found: false, phonetic: '', audio: '' };
+
+            try {
+                const res = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(cleanWord)}`);
+                if (!res.ok) return { found: false, phonetic: '', audio: '' };
+                const data = await res.json();
+                if (!Array.isArray(data) || data.length === 0) return { found: false, phonetic: '', audio: '' };
+
+                const entry = data[0];
+                let phonetic = entry.phonetic || '';
+                let audio = '';
+
+                if (Array.isArray(entry.phonetics)) {
+                    for (const p of entry.phonetics) {
+                        if (!phonetic && p.text) phonetic = p.text;
+                        if (!audio && p.audio) audio = p.audio;
+                        if (phonetic && audio) break;
+                    }
+                }
+
+                if (phonetic && !phonetic.startsWith('/') && !phonetic.startsWith('[')) {
+                    phonetic = `/${phonetic}/`;
+                }
+
+                return {
+                    found: Boolean(phonetic || audio),
+                    phonetic,
+                    audio
+                };
+            } catch (err) {
+                return { found: false, phonetic: '', audio: '' };
+            }
+        }
+
+        function setIpaStatusUI(elId, type, message) {
+            const el = document.getElementById(elId);
+            if (!el) return;
+            if (!type || !message) {
+                el.className = 'hidden mt-2 text-xs font-medium flex items-center gap-1.5';
+                el.textContent = '';
+                return;
+            }
+            const styles = {
+                loading: 'text-brand-600',
+                success: 'text-emerald-600',
+                warn: 'text-amber-600'
+            };
+            const icons = {
+                loading: '<i class="fa-solid fa-spinner fa-spin"></i>',
+                success: '<i class="fa-solid fa-circle-check"></i>',
+                warn: '<i class="fa-solid fa-circle-info"></i>'
+            };
+            el.className = `mt-2 text-xs font-medium flex items-center gap-1.5 ${styles[type] || 'text-slate-500'}`;
+            el.innerHTML = `${icons[type] || ''}<span>${escapeHtml(message)}</span>`;
+        }
+
+        window.onNewWordInput = function() {
+            clearTimeout(newWordDebounceTimer);
+            const word = document.getElementById('new-word-en').value.trim();
+            if (!word) {
+                setIpaStatusUI('new-ipa-status', null);
+                return;
+            }
+            newWordDebounceTimer = setTimeout(() => {
+                fetchNewWordIPA(true);
+            }, 600);
+        };
+
+        window.fetchNewWordIPA = async function(isAuto = false) {
+            const word = document.getElementById('new-word-en').value.trim();
+            if (!word) {
+                if (!isAuto) showToast('Vui lòng nhập từ tiếng Anh trước!', 'info');
+                return;
+            }
+            setIpaStatusUI('new-ipa-status', 'loading', `Đang tra phiên âm cho "${word}"...`);
+            const result = await lookupDictionaryIPA(word);
+            if (document.getElementById('new-word-en').value.trim() !== word) return;
+
+            if (result.found) {
+                const phonInput = document.getElementById('new-word-phonetic');
+                if (result.phonetic && (!isAuto || !phonInput.value.trim())) {
+                    phonInput.value = result.phonetic;
+                }
+                document.getElementById('new-word-audio').value = result.audio || '';
+                setIpaStatusUI('new-ipa-status', 'success', `Đã tìm thấy phiên âm ${result.phonetic || ''}${result.audio ? ' & âm thanh chuẩn' : ''}!`);
+            } else {
+                setIpaStatusUI('new-ipa-status', 'warn', 'Không tìm thấy trong từ điển — bạn vẫn có thể nhập phiên âm tay hoặc thêm từ bình thường.');
+            }
+        };
+
+        window.onEditWordInput = function() {
+            clearTimeout(editWordDebounceTimer);
+            const word = document.getElementById('edit-word-en').value.trim();
+            if (!word) return;
+            editWordDebounceTimer = setTimeout(() => {
+                fetchEditWordIPA(true);
+            }, 600);
         };
 
         window.fetchEditWordIPA = async function(isAuto = false) {
